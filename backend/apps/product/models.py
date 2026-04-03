@@ -77,7 +77,7 @@ class ProductSale(models.Model):
         null=True,
         blank=True,
         related_name='product_sales',
-        verbose_name='Barbero que vendio (opcional)'
+        verbose_name='Vendedor de productos (Opcional)'
     )
 
     quantity = models.IntegerField(validators=[MinValueValidator(1)])
