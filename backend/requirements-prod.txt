@@ -1,0 +1,10 @@
+# ─────────────────────────────────────────────────────────────
+# requirements-prod.txt — Dependencias SOLO de produccion
+# Instalar con: pip install -r requirements.txt -r requirements-prod.txt
+# ─────────────────────────────────────────────────────────────
+
+# Base de datos PostgreSQL
+psycopg2-binary>=2.9
+
+# Email via SendGrid
+django-anymail[sendgrid]>=10.0

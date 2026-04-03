@@ -13,6 +13,7 @@ class Barber(models.Model):
     name = models.CharField(max_length=200)
     phone = models.CharField(max_length=20, blank=True)
     document_id = models.CharField(max_length=50, blank=True)
+    specialty = models.CharField(max_length=100, blank=True, default='')
     
     commission_percentage = models.DecimalField(
         max_digits=5,

@@ -1,8 +1,12 @@
-from django.urls import path
-from . import views
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
+from .views import DailyReportViewSet
+
+router = DefaultRouter()
+router.register(r'', DailyReportViewSet, basename='report')
 
 app_name = 'report'
 
 urlpatterns = [
-    # Aquí irán los endpoints de report
+    path('', include(router.urls)),
 ]

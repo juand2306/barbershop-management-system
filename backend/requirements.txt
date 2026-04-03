@@ -1,9 +1,22 @@
-Django>=4.2
+# ─────────────────────────────────────────────────────────────
+# requirements.txt — Dependencias base (dev + prod)
+# Para produccion tambien instalar: requirements-prod.txt
+# ─────────────────────────────────────────────────────────────
+
+# Core Django
+Django>=4.2,<5.0
 djangorestframework>=3.14
 django-cors-headers>=4.0
 djangorestframework-simplejwt>=5.2
-psycopg2-binary>=2.9
 python-dotenv>=1.0
-redis>=4.5
+
+# Filtros y busqueda
+django-filter>=23.0
+
+# Tareas asincronas
 celery>=5.3
+django-celery-beat>=2.5
+redis>=4.5
+
+# Servidor de produccion
 gunicorn>=20.1

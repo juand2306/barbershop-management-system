@@ -9,7 +9,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-dev-key-change-in-production')
 
-DEBUG = os.getenv('DEBUG', 'False') == 'True'
+# En desarrollo DEBUG=True por defecto (SQLite).
+# En produccion poner DEBUG=False en el .env
+DEBUG = os.getenv('DEBUG', 'True') == 'True'
 
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
@@ -20,12 +22,13 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    
+
     # Third party
     'rest_framework',
+    'django_filters',
     'corsheaders',
     'django_celery_beat',
-    
+
     # Apps locales
     'apps.barbershop',
     'apps.barber',
@@ -34,6 +37,7 @@ INSTALLED_APPS = [
     'apps.service_record',
     'apps.product',
     'apps.advance',
+    'apps.expense',
     'apps.payment_method',
     'apps.report',
     'apps.users',
@@ -70,16 +74,29 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'config.wsgi.application'
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.getenv('DB_NAME', 'barberia_db'),
-        'USER': os.getenv('DB_USER', 'postgres'),
-        'PASSWORD': os.getenv('DB_PASSWORD', 'password'),
-        'HOST': os.getenv('DB_HOST', 'localhost'),
-        'PORT': os.getenv('DB_PORT', '5432'),
+# ─────────────────────────────────────────────────────────────
+# BASE DE DATOS
+# DEBUG=True  → SQLite (sin instalacion extra, ideal para dev)
+# DEBUG=False → PostgreSQL (produccion)
+# ─────────────────────────────────────────────────────────────
+if DEBUG:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
     }
-}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': os.getenv('DB_NAME', 'barberia_db'),
+            'USER': os.getenv('DB_USER', 'postgres'),
+            'PASSWORD': os.getenv('DB_PASSWORD', 'password'),
+            'HOST': os.getenv('DB_HOST', 'localhost'),
+            'PORT': os.getenv('DB_PORT', '5432'),
+        }
+    }
 
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
@@ -114,6 +131,7 @@ REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 20,
     'DEFAULT_FILTER_BACKENDS': [
+        'django_filters.rest_framework.DjangoFilterBackend',
         'rest_framework.filters.SearchFilter',
         'rest_framework.filters.OrderingFilter',
     ],
@@ -121,23 +139,38 @@ REST_FRAMEWORK = {
 
 # JWT
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=15),
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
     'ALGORITHM': 'HS256',
     'SIGNING_KEY': os.getenv('JWT_SECRET', SECRET_KEY),
+    'AUTH_HEADER_TYPES': ('Bearer',),
 }
 
 # CORS
-CORS_ALLOWED_ORIGINS = os.getenv('CORS_ALLOWED_ORIGINS', 'http://localhost:3000').split(',')
+CORS_ALLOWED_ORIGINS = os.getenv(
+    'CORS_ALLOWED_ORIGINS',
+    'http://localhost:5173,http://localhost:3000'
+).split(',')
 
-# Email
-EMAIL_BACKEND = 'anymail.backends.sendgrid.EmailBackend'
-ANYMAIL = {
-    'SENDGRID_API_KEY': os.getenv('SENDGRID_API_KEY', ''),
-}
-DEFAULT_FROM_EMAIL = 'noreply@barbershopsystem.com'
+# ─────────────────────────────────────────────────────────────
+# EMAIL
+# En desarrollo imprime en consola (no requiere credenciales)
+# En produccion usa SendGrid via Anymail
+# ─────────────────────────────────────────────────────────────
+if DEBUG:
+    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+else:
+    EMAIL_BACKEND = 'anymail.backends.sendgrid.EmailBackend'
+    ANYMAIL = {
+        'SENDGRID_API_KEY': os.getenv('SENDGRID_API_KEY', ''),
+    }
 
-# Celery
+DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'noreply@barbershopsystem.com')
+
+# ─────────────────────────────────────────────────────────────
+# CELERY (solo si se define CELERY_BROKER_URL en .env)
+# En desarrollo no es necesario levantar Redis/Celery
+# ─────────────────────────────────────────────────────────────
 CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', 'redis://localhost:6379/0')
 CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND', 'redis://localhost:6379/1')
 CELERY_ACCEPT_CONTENT = ['json']

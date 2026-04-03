@@ -1,135 +1,181 @@
 # Barbershop Management System
 
-Sistema integral de gestión para barberías con Django REST Framework + React.
+Sistema integral de gestión para barberías — Django REST Framework + React.
 
 ## 🚀 Características
 
 - ✅ Gestión de citas y calendario
-- ✅ Control de barberos y comisiones
-- ✅ Registro de servicios y precios
-- ✅ Inventario y ventas de productos
-- ✅ Vales a barberos (sin descuento automático)
-- ✅ Cierre de caja diario editable
-- ✅ Reportes detallados (PDF y Excel)
+- ✅ Control de barberos y comisiones (sin descuento automático de vales)
+- ✅ Registro de servicios con hora editable
+- ✅ Inventario y ventas de productos (descuento de stock solo en creación)
+- ✅ Vales a barberos con registro de pagos
+- ✅ Cierre de caja diario con desglose por método de pago dinámico
+- ✅ Gastos categorizados y auditables
+- ✅ Reportes detallados
 - ✅ Portal público para clientes (reservas)
-- ✅ Autenticación JWT
+- ✅ Autenticación JWT (Bearer Token)
 - ✅ Roles y permisos (Admin, Manager, Recepcionista, Barbero)
+
+## 💰 Lógica de Caja — Vales
+
+```
+CAJA DEL DÍA:
+─────────────────────────────────────────────────
+INGRESOS:
+  + Total servicios cobrados
+  + Total ventas de productos
+  + Pagos de vales recibidos   ← EXTRA (barbero pagó un vale)
+
+EGRESOS:
+  - Total gastos del día
+  - Total vales entregados     ← Sale de caja (NO afecta comisiones)
+
+COMISIONES (sobre servicios, independiente de vales):
+  - Comisiones de barberos
+
+GANANCIA NETA:
+  = Ingresos - Egresos - Comisiones
+
+DESGLOSE POR MÉTODO DE PAGO (dinámico):
+  Efectivo esperado   = Servicios(efectivo) + Productos(efectivo)
+                       + PagosVale(efectivo) - Gastos(efectivo)
+                       - Vales(efectivo)
+  Nequi esperado      = idem para Nequi
+  Daviplata esperado  = idem para Daviplata
+  ...etc (configurable)
+─────────────────────────────────────────────────
+```
 
 ## 📋 Tech Stack
 
 ### Backend
 - Django 4.2+
 - Django REST Framework
-- PostgreSQL
-- Celery + Redis
-- JWT Authentication
+- **SQLite en desarrollo** (sin configuración extra)
+- **PostgreSQL en producción** (`DEBUG=False` en `.env`)
+- Celery + Redis (opcional en desarrollo)
+- JWT Authentication (Bearer Token)
+- django-filter para filtros avanzados
 
 ### Frontend
 - React 18+
 - Vite
 - TailwindCSS
-- React Query
+- React Query (@tanstack/react-query)
 - React Big Calendar
+- Recharts
 
-## 🛠️ Setup Local
+## 🏗️ Estructura del Backend
+
+```
+backend/
+└── apps/
+    ├── barbershop/       # Info de la barbería
+    ├── users/            # Usuarios con roles
+    ├── barber/           # Barberos + control diario
+    ├── service/          # Catálogo de servicios
+    ├── appointment/      # Citas agendadas
+    ├── service_record/   # Servicios realizados (ingresos)
+    ├── product/          # Inventario + ventas de productos
+    ├── advance/          # Vales + pagos de vales ← lógica especial
+    ├── expense/          # Gastos de la barbería
+    ├── payment_method/   # Medios de pago configurables
+    └── report/           # Cierre de caja diario
+```
+
+## 🛠️ Setup Local (Desarrollo)
 
 ### Backend
 
-1. **Clonar repositorio**
 ```bash
+# 1. Clonar
 git clone https://github.com/juand2306/barbershop-management-system.git
 cd barbershop-management-system/backend
-```
 
-2. **Crear virtual environment**
-```bash
+# 2. Virtual environment
 python -m venv venv
-source venv/bin/activate  # En Windows: venv\Scripts\activate
-```
+venv\Scripts\activate      # Windows
+# source venv/bin/activate  # macOS/Linux
 
-3. **Instalar dependencias**
-```bash
+# 3. Instalar dependencias
 pip install -r requirements.txt
-```
 
-4. **Configurar variables de entorno**
-```bash
-cp .env.example .env
-# Editar .env con tus valores
-```
+# 4. Variables de entorno (DEBUG=True → usa SQLite automáticamente)
+copy .env.example .env
 
-5. **Crear base de datos PostgreSQL**
-```bash
-createdb barberia_db
-```
-
-6. **Correr migraciones**
-```bash
-python manage.py makemigrations
+# 5. Migraciones (crea db.sqlite3 automáticamente)
 python manage.py migrate
-```
 
-7. **Crear superuser**
-```bash
+# 6. Crear superadmin
 python manage.py createsuperuser
-```
 
-8. **Correr servidor**
-```bash
+# 7. Correr servidor
 python manage.py runserver
 ```
 
-API disponible en: `http://localhost:8000/api/`
+API en: `http://localhost:8000/api/`  
 Admin en: `http://localhost:8000/admin/`
 
 ### Frontend
 
-1. **Navegar a carpeta frontend**
 ```bash
-cd ../frontend
-```
-
-2. **Instalar dependencias**
-```bash
+cd frontend
 npm install
-```
-
-3. **Crear .env**
-```bash
-cp .env.example .env
-```
-
-4. **Correr en desarrollo**
-```bash
+copy .env.example .env
 npm run dev
 ```
 
-App disponible en: `http://localhost:5173/`
+App en: `http://localhost:5173/`
 
-## 📚 Documentación
+## 🚀 Producción
 
-Revisar documentación en el drive compartido.
+```bash
+# Instalar dependencias extra de producción
+pip install -r requirements.txt -r requirements-prod.txt
 
-## 🔐 Seguridad
+# .env con DEBUG=False y credenciales de PostgreSQL
+```
 
-- JWT para autenticación
-- CORS configurado
-- Validación de permisos por rol
-- Contraseñas hasheadas (Django)
+## 🔐 Autenticación
 
-## 📝 Estructura de Base de Datos
+```bash
+# Obtener token
+POST /api/auth/token/
+{ "username": "...", "password": "..." }
 
-Modelos principales:
-- Barbershop
-- Barber (+ BarberDailyActive)
-- Service
-- Appointment
-- ServiceRecord
-- Product (+ ProductSale)
-- Advance (Vales)
-- Expense
-- DailyReport (+ BarberDailyCommission)
-- User (Auth)
+# Usar en headers
+Authorization: Bearer <access_token>
+
+# Renovar token
+POST /api/auth/token/refresh/
+{ "refresh": "<refresh_token>" }
+```
+
+## 📡 Endpoints Principales
+
+| Método | Endpoint | Descripción |
+|--------|----------|-------------|
+| `GET/POST` | `/api/advances/` | Vales |
+| `POST` | `/api/advances/{id}/registrar-pago/` | Registrar pago de vale |
+| `GET` | `/api/advances/payments/` | Historial de pagos de vales |
+| `GET/POST` | `/api/expenses/` | Gastos |
+| `GET/POST` | `/api/reports/` | Cierres de caja |
+| `GET/POST` | `/api/service-records/` | Servicios realizados |
+| `GET/POST` | `/api/payment-methods/` | Métodos de pago |
+
+## 📝 Modelos Principales
+
+- `Barbershop` — Info de la barbería (singleton por instancia)
+- `User` — Usuario customizado (Admin/Manager/Receptionist/Barber)
+- `Barber` + `BarberDailyActive` — Barberos y asistencia diaria
+- `Service` — Catálogo de servicios
+- `Appointment` — Citas
+- `ServiceRecord` — Servicios realizados (ingreso de caja)
+- `Product` + `ProductSale` — Inventario y ventas
+- `Advance` + `AdvancePayment` — Vales y sus pagos ← lógica especial
+- `Expense` — Gastos
+- `PaymentMethod` — Métodos de pago configurables
+- `DailyReport` + `DailyReportPaymentBreakdown` + `BarberDailyCommission` — Cierre de caja
 
 ## 👨‍💻 Autor
 
