@@ -10,14 +10,16 @@ from apps.core.permissions import IsAdminOrManager
 class ProductViewSet(viewsets.ModelViewSet):
     """
     Gestion Administrativa de Inventario (Productos).
+    Soft-delete: Productos se marcan como inactive en lugar de eliminarse.
     """
     serializer_class = ProductSerializer
     
     def get_permissions(self):
         """
-        Todos pueden ver catalogo, solo Admin/Manager pueden crear/modificar stock.
+        GET list/retrieve: IsAuthenticated (solo usuarios de la barbería)
+        POST/PUT/DELETE: IsAdminOrManager
         """
-        if self.action in ['list', 'retrieve', 'stock_bajo']:
+        if self.action in ['list', 'retrieve', 'stock_bajo', 'get_price']:
             permission_classes = [permissions.IsAuthenticated]
         else:
             permission_classes = [IsAdminOrManager]
@@ -41,12 +43,31 @@ class ProductViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(barbershop=self.request.user.barbershop)
 
+    def perform_destroy(self, instance):
+        """
+        Soft-delete: Marcar como inactive.
+        Prevenir eliminación de productos con stock activo.
+        """
+        # Validar que el producto no tiene stock > 0
+        if instance.current_quantity > 0:
+            raise status.HTTP_400_BAD_REQUEST({
+                "error": f"No se puede eliminar producto con stock activo ({instance.current_quantity} unidades). Agota el stock primero."
+            })
+        
+        # Si no hay stock, marcar como inactivo
+        instance.active = False
+        instance.save()
+        
+        return Response(
+            {'status': 'Producto desactivado correctamente'},
+            status=status.HTTP_200_OK
+        )
+
     @action(detail=False, methods=['get'], url_path='stock-bajo')
     def stock_bajo(self, request):
         """
         Retorna los productos que estan igual o por debajo de su minimum_quantity.
         """
-        # Utiliza una comparacion directa usando F expressions a nivel base de datos
         from django.db.models import F
         productos_bajos = Product.objects.filter(
             barbershop=request.user.barbershop,
@@ -56,6 +77,29 @@ class ProductViewSet(viewsets.ModelViewSet):
         
         serializer = self.get_serializer(productos_bajos, many=True)
         return Response(serializer.data)
+
+    @action(detail=True, methods=['get'], url_path='get-price')
+    def get_price(self, request, pk=None):
+        """
+        Endpoint para obtener el precio de un producto específico.
+        Usado por frontend para auto-completar unit_price al vender un producto.
+        
+        Retorna: {id, name, price, current_quantity, is_low_stock}
+        """
+        try:
+            product = self.get_object()
+            return Response({
+                'id': product.id,
+                'name': product.name,
+                'price': str(product.price),
+                'current_quantity': product.current_quantity,
+                'is_low_stock': product.is_low_stock
+            }, status=status.HTTP_200_OK)
+        except Product.DoesNotExist:
+            return Response(
+                {'error': 'Producto no encontrado'},
+                status=status.HTTP_404_NOT_FOUND
+            )
 
 
 class ProductSaleViewSet(viewsets.ModelViewSet):

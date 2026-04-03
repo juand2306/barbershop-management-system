@@ -24,24 +24,45 @@ class BarberDailyActiveSerializer(serializers.ModelSerializer):
         )
         read_only_fields = ('id', 'barbershop', 'created_at')
 
-    def validate(self, data):
+    def create(self, validated_data):
         """
-        No permitir mas de un registro de actividad por barbero en el mismo dia.
-        Aunque el unique_together protege a nivel de base de datos, 
-        esta validacion captura el error para enviar un 400 limpio.
-        """
-        barber = data.get('barber')
-        work_date = data.get('work_date', datetime.date.today())
+        Si ya existe un registro para este barbero en esta fecha,
+        actualizar en lugar de crear nuevo.
         
-        # Validar unicamente si estamos creando (no hay id en instance)
-        if not self.instance:
-            pass # UniqueValidator puede no estar configurado, asi que revisaremos manualmente.
-            exists = BarberDailyActive.objects.filter(
-                barber=barber, work_date=work_date
-            ).exists()
-            if exists:
-                raise serializers.ValidationError({
-                    "work_date": f"El barbero ya tiene registro de actividad para la fecha {work_date}."
-                })
+        Esto permite que el frontend pueda hacer POST múltiples veces
+        sin error de unique_together.
+        """
+        barber = validated_data.get('barber')
+        work_date = validated_data.get('work_date', datetime.date.today())
+        barbershop = validated_data.get('barbershop')
+        
+        # Buscar si ya existe registro para este barbero en esta fecha
+        existing = BarberDailyActive.objects.filter(
+            barber=barber,
+            work_date=work_date,
+            barbershop=barbershop
+        ).first()
+        
+        if existing:
+            # Si existe, actualizar en lugar de crear nuevo
+            for attr, value in validated_data.items():
+                setattr(existing, attr, value)
+            existing.save()
+            return existing
+        
+        # Si no existe, crear normalmente
+        return super().create(validated_data)
 
+    def validate(self, data):
+        """Validaciones de lógica de negocio"""
+        entry_time = data.get('entry_time')
+        exit_time = data.get('exit_time')
+        
+        # Validación: exit_time debe ser después de entry_time
+        if entry_time and exit_time:
+            if exit_time <= entry_time:
+                raise serializers.ValidationError({
+                    "exit_time": "La hora de salida debe ser después de la entrada."
+                })
+        
         return data

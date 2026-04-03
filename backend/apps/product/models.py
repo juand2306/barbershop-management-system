@@ -96,6 +96,7 @@ class ProductSale(models.Model):
 
     # Permite editar la fecha si se registro despues de ocurrir el evento
     sale_date = models.DateField(
+        default=timezone.now,
         verbose_name='Fecha de la venta',
         help_text='Fecha real de la venta'
     )
