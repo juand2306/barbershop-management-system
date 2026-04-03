@@ -38,13 +38,33 @@ const CashRegister = () => {
   // ── Form states ───────────────────────────────────────────────────
   const [serviceForm, setServiceForm] = useState({ barber: '', service: '', price_charged: '', payment_method: '', client_name: '' });
 
-  const [productForm, setProductForm] = useState({ product: '', barber: '', quantity: 1, unit_price: '', payment_method: '' });
+  const [productForm, setProductForm] = useState({ product: '', seller: '', quantity: 1, unit_price: '', payment_method: '' });
 
   // expense fields aligned to backend model: detail (not description), expense_date required
   const [expenseForm, setExpenseForm] = useState({ detail: '', amount: '', category: 'otro', payment_method: '' });
 
   // advance fields aligned to backend model: detail (not notes)
   const [advanceForm, setAdvanceForm] = useState({ barber: '', amount: '', payment_method: '', detail: '' });
+
+  // ── Auto-fill unit_price cuando selecciona producto ───────────────
+  const handleProductSelect = async (productId) => {
+    if (!productId) {
+      setProductForm(prev => ({ ...prev, product: '', unit_price: '' }));
+      return;
+    }
+    
+    try {
+      const response = await api.get(`/products/${productId}/get-price/`);
+      setProductForm(prev => ({
+        ...prev,
+        product: productId,
+        unit_price: response.data.price
+      }));
+    } catch (error) {
+      toast.error('Error al obtener precio del producto');
+      console.error('Error fetching product price:', error);
+    }
+  };
 
   // ── Mutations ─────────────────────────────────────────────────────
   const createService = useMutation({
@@ -63,7 +83,7 @@ const CashRegister = () => {
     onSuccess: () => {
       toast.success('✅ Venta registrada');
       setActiveModal(null);
-      setProductForm({ product: '', barber: '', quantity: 1, unit_price: '', payment_method: '' });
+      setProductForm({ product: '', seller: '', quantity: 1, unit_price: '', payment_method: '' });
     },
     onError: (err) => toast.error(extractApiError(err))
   });
@@ -118,12 +138,20 @@ const CashRegister = () => {
   const handleProductSubmit = (e) => {
     e.preventDefault();
     if (!productForm.payment_method) { toast.error('Selecciona un método de pago. Si no hay, créalo en Configuración.'); return; }
+    
+    const unitPrice = parseFloat(productForm.unit_price);
+    const quantity = parseInt(productForm.quantity);
+    
+    if (isNaN(unitPrice) || unitPrice < 0) { toast.error('Ingresa un precio unitario válido'); return; }
+    if (isNaN(quantity) || quantity < 1) { toast.error('Ingresa una cantidad válida'); return; }
+    
     createProductSale.mutate({
       product: productForm.product,
-      barber: productForm.barber || undefined,
-      quantity: parseInt(productForm.quantity),
-      unit_price: parseFloat(productForm.unit_price),
+      barber: productForm.seller || null,  // Ahora es 'seller', no 'barber'
+      quantity: quantity,
+      unit_price: unitPrice,
       payment_method: productForm.payment_method,
+      sale_date: todayStr,  // Agregar fecha de venta
     });
   };
 
@@ -376,14 +404,27 @@ const CashRegister = () => {
         <form onSubmit={handleProductSubmit} className="space-y-4">
           <div className="space-y-1">
             <label className="text-xs uppercase font-bold text-gray-400 tracking-wider">Producto *</label>
-            <select className="input-glass" required value={productForm.product} onChange={e => setProductForm({...productForm, product: e.target.value})}>
+            <select 
+              className="input-glass" 
+              required 
+              value={productForm.product} 
+              onChange={(e) => handleProductSelect(e.target.value)}
+            >
               <option value="">Seleccione un producto...</option>
-              {products?.map(p => <option key={p.id} value={p.id}>{p.name} (Stock: {p.stock})</option>)}
+              {products?.map(p => (
+                <option key={p.id} value={p.id}>
+                  {p.name} (Stock: {p.current_quantity})
+                </option>
+              ))}
             </select>
           </div>
           <div className="space-y-1">
-            <label className="text-xs uppercase font-bold text-gray-400 tracking-wider">Barbero (Opcional)</label>
-            <select className="input-glass" value={productForm.barber} onChange={e => setProductForm({...productForm, barber: e.target.value})}>
+            <label className="text-xs uppercase font-bold text-gray-400 tracking-wider">Vendedor de Productos (Opcional)</label>
+            <select 
+              className="input-glass" 
+              value={productForm.seller} 
+              onChange={(e) => setProductForm({...productForm, seller: e.target.value})}
+            >
               <option value="">Sin asignar</option>
               {barbers?.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select>
@@ -391,21 +432,45 @@ const CashRegister = () => {
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
               <label className="text-xs uppercase font-bold text-gray-400 tracking-wider">Cantidad *</label>
-              <input type="number" min="1" required className="input-glass font-bold" value={productForm.quantity} onChange={e => setProductForm({...productForm, quantity: e.target.value})} />
+              <input 
+                type="number" 
+                min="1" 
+                required 
+                className="input-glass font-bold" 
+                value={productForm.quantity} 
+                onChange={e => setProductForm({...productForm, quantity: e.target.value})} 
+              />
             </div>
             <div className="space-y-1">
               <label className="text-xs uppercase font-bold text-gray-400 tracking-wider">Precio Unitario *</label>
-              <input type="number" min="0" required className="input-glass text-cyan-400 font-bold" value={productForm.unit_price} onChange={e => setProductForm({...productForm, unit_price: e.target.value})} placeholder="15000" />
+              <input 
+                type="number" 
+                min="0" 
+                required 
+                className="input-glass text-cyan-400 font-bold" 
+                value={productForm.unit_price} 
+                onChange={e => setProductForm({...productForm, unit_price: e.target.value})} 
+                placeholder="Auto-completado con el precio del producto"
+              />
             </div>
           </div>
           <div className="space-y-1">
             <label className="text-xs uppercase font-bold text-gray-400 tracking-wider">Método de Pago *</label>
-            <select className="input-glass" value={productForm.payment_method} onChange={e => setProductForm({...productForm, payment_method: e.target.value})}>
+            <select 
+              className="input-glass" 
+              required
+              value={productForm.payment_method} 
+              onChange={e => setProductForm({...productForm, payment_method: e.target.value})}
+            >
               <option value="">Seleccione método de pago...</option>
               {paymentMethods?.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </div>
-          <button type="submit" disabled={createProductSale.isLoading} className="btn bg-cyan-600 hover:bg-cyan-500 text-white w-full py-4 mt-2 shadow-[4px_4px_0px_rgba(0,0,0,1)] font-black uppercase tracking-widest">
+          <button 
+            type="submit" 
+            disabled={createProductSale.isLoading} 
+            className="btn bg-cyan-600 hover:bg-cyan-500 text-white w-full py-4 mt-2 shadow-[4px_4px_0px_rgba(0,0,0,1)] font-black uppercase tracking-widest"
+          >
             {createProductSale.isLoading ? 'GUARDANDO...' : 'REGISTRAR VENTA'}
           </button>
         </form>
