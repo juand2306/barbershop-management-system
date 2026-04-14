@@ -18,7 +18,7 @@ const Modal = ({ isOpen, onClose, title, children, maxWidth = "max-w-md" }) => {
   if (!isOpen) return null;
 
   const modalContent = (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-hidden">
       {/* Backdrop */}
       <div 
         className="absolute inset-0 bg-black/80 backdrop-blur-sm transition-opacity"
@@ -27,11 +27,11 @@ const Modal = ({ isOpen, onClose, title, children, maxWidth = "max-w-md" }) => {
 
       {/* Modal Card */}
       <div 
-        className={`glass-panel w-full ${maxWidth} relative z-10 animate-slide-up flex flex-col max-h-[90vh]`}
+        className={`glass-panel w-full ${maxWidth} relative z-10 animate-slide-up flex flex-col max-h-[90vh] sm:max-h-[85vh]`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between p-6 border-b border-white/10">
-          <h2 className="text-xl font-bold text-white uppercase tracking-wide">{title}</h2>
+        <div className="flex items-center justify-between p-5 border-b border-white/10 shrink-0">
+          <h2 className="text-lg sm:text-xl font-bold text-white uppercase tracking-wide">{title}</h2>
           <button 
             onClick={onClose}
             className="text-gray-400 hover:text-white transition-colors bg-white/5 hover:bg-white/10 p-2 rounded-sm"
@@ -40,7 +40,7 @@ const Modal = ({ isOpen, onClose, title, children, maxWidth = "max-w-md" }) => {
           </button>
         </div>
 
-        <div className="p-6 overflow-y-auto custom-scrollbar flex-1 min-h-0">
+        <div className="p-5 overflow-y-auto custom-scrollbar flex-1 mb-[env(safe-area-inset-bottom)]">
           {children}
         </div>
       </div>

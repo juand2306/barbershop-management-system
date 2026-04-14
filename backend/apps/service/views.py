@@ -59,6 +59,7 @@ class ServiceViewSet(viewsets.ModelViewSet):
         Prevenir eliminación de servicios con citas activas/próximas.
         """
         from apps.appointment.models import Appointment
+        from rest_framework.exceptions import ValidationError
         
         # Verificar si hay citas activas/confirmadas/próximas para este servicio
         pending_appointments = Appointment.objects.filter(
@@ -68,7 +69,7 @@ class ServiceViewSet(viewsets.ModelViewSet):
         ).exists()
         
         if pending_appointments:
-            raise status.HTTP_400_BAD_REQUEST({
+            raise ValidationError({
                 "error": "No se puede eliminar servicio con citas activas. Cancélalas primero."
             })
         

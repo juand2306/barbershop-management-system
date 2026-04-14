@@ -176,3 +176,13 @@ class AdvancePayment(models.Model):
         )['total'] or 0
         advance.amount_paid = total_paid
         advance.update_status()
+
+    def delete(self, *args, **kwargs):
+        """Al eliminar, actualizar el monto pagado y estado del vale padre."""
+        advance = self.advance
+        super().delete(*args, **kwargs)
+        total_paid = advance.payments.aggregate(
+            total=models.Sum('amount')
+        )['total'] or 0
+        advance.amount_paid = total_paid
+        advance.update_status()

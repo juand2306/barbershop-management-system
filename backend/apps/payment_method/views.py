@@ -1,5 +1,6 @@
 from rest_framework import viewsets, permissions, status
 from rest_framework.response import Response
+from rest_framework.exceptions import ValidationError
 from .models import PaymentMethod
 from .serializers import PaymentMethodSerializer
 from apps.core.permissions import IsAdminOrManager
@@ -49,8 +50,8 @@ class PaymentMethodViewSet(viewsets.ModelViewSet):
         has_advances = Advance.objects.filter(payment_method=instance).exists()
         
         if has_service_records or has_product_sales or has_expenses or has_advances:
-            raise status.HTTP_400_BAD_REQUEST(
-                "No se puede eliminar método de pago con transacciones. Desactívalo en su lugar."
+            raise ValidationError(
+                "No se puede eliminar este método de pago porque tiene transacciones asociadas. Desactívalo en su lugar."
             )
         
         # Si no hay transacciones, eliminar

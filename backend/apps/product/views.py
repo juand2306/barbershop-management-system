@@ -48,9 +48,11 @@ class ProductViewSet(viewsets.ModelViewSet):
         Soft-delete: Marcar como inactive.
         Prevenir eliminación de productos con stock activo.
         """
+        from rest_framework.exceptions import ValidationError
+        
         # Validar que el producto no tiene stock > 0
         if instance.current_quantity > 0:
-            raise status.HTTP_400_BAD_REQUEST({
+            raise ValidationError({
                 "error": f"No se puede eliminar producto con stock activo ({instance.current_quantity} unidades). Agota el stock primero."
             })
         
@@ -105,9 +107,11 @@ class ProductViewSet(viewsets.ModelViewSet):
 class ProductSaleViewSet(viewsets.ModelViewSet):
     """
     CRUD completo para registrar ventas de productos.
+    Edición desactivada: Se debe anular y volver a registrar para evitar conflictos de inventario.
     """
     serializer_class = ProductSaleSerializer
     permission_classes = [permissions.IsAuthenticated]
+    http_method_names = ['get', 'post', 'delete', 'head', 'options']
 
     def get_queryset(self):
         qs = ProductSale.objects.select_related('product', 'barber', 'payment_method').filter(
@@ -116,15 +120,24 @@ class ProductSaleViewSet(viewsets.ModelViewSet):
         
         # Filtros
         date = self.request.query_params.get('date')
+        date_from = self.request.query_params.get('date_from')
+        date_to = self.request.query_params.get('date_to')
         barber = self.request.query_params.get('barber')
         product = self.request.query_params.get('product')
+        payment_method = self.request.query_params.get('payment_method')
 
         if date:
             qs = qs.filter(sale_date=date)
+        if date_from:
+            qs = qs.filter(sale_date__gte=date_from)
+        if date_to:
+            qs = qs.filter(sale_date__lte=date_to)
         if barber:
             qs = qs.filter(barber_id=barber)
         if product:
             qs = qs.filter(product_id=product)
+        if payment_method:
+            qs = qs.filter(payment_method_id=payment_method)
 
         return qs.order_by('-sale_date', '-created_at')
 

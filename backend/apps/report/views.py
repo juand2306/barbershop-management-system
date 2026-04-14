@@ -2,7 +2,8 @@ from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.db import transaction
-from django.db.models import Sum
+from django.db.models import Sum, F, ExpressionWrapper, DecimalField
+from django.db import models
 
 from .models import DailyReport, DailyReportPaymentBreakdown, BarberDailyCommission
 from .serializers import DailyReportSerializer
@@ -44,13 +45,20 @@ class DailyReportViewSet(viewsets.ModelViewSet):
         
         status_filter = self.request.query_params.get('status')
         date = self.request.query_params.get('date')
+        date_from = self.request.query_params.get('date_from')
+        date_to = self.request.query_params.get('date_to')
         
         if status_filter:
              qs = qs.filter(status=status_filter)
         if date:
              qs = qs.filter(report_date=date)
+        if date_from:
+             qs = qs.filter(report_date__gte=date_from)
+        if date_to:
+             qs = qs.filter(report_date__lte=date_to)
              
         return qs.order_by('-report_date')
+
 
     @action(detail=False, methods=['post'], url_path='generar-cierre')
     def generar_cierre(self, request):
@@ -138,8 +146,16 @@ class DailyReportViewSet(viewsets.ModelViewSet):
                 if s_total > 0:
                      c_amount = s_total * (barber.commission_percentage / 100)
                      
-                     # Calculo informativo de vales pendientes
-                     p_advances = barber.advances.exclude(status='pagado').aggregate(Sum('amount_pending'))['amount_pending__sum'] or 0
+                     # Calculo informativo de vales pendientes (amount - amount_paid, calculado en ORM)
+                     from django.db.models import ExpressionWrapper as EW, DecimalField as DF
+                     p_advances = barber.advances.exclude(status='pagado').aggregate(
+                         pending=Sum(
+                             EW(
+                                 models.F('amount') - models.F('amount_paid'),
+                                 output_field=DF(max_digits=12, decimal_places=2)
+                             )
+                         )
+                     )['pending'] or 0
 
                      barber_commissions_list.append(BarberDailyCommission(
                           barbershop=barbershop,

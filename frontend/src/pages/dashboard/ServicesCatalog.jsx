@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../api/axios';
 import Modal from '../../components/Modal';
 import { toast } from 'react-toastify';
-import { Scissors, Plus, Tag, Edit2, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Scissors, Plus, Edit2 } from 'lucide-react';
 
 const extractApiError = (err) => {
   const data = err.response?.data;
@@ -27,6 +27,48 @@ const CATEGORIES = [
 ];
 
 const emptyForm = { name: '', description: '', price: '', duration_minutes: 30, category: 'corte', active: true };
+
+// ⚠️ IMPORTANT: defined OUTSIDE ServicesCatalog so React doesn't remount (lose focus) on every keystroke
+const ServiceForm = ({ data, setData, onSubmit, isLoading, btnLabel }) => (
+  <form onSubmit={onSubmit} className="space-y-4">
+    <div className="space-y-1">
+      <label className="text-xs uppercase font-bold text-gray-400 tracking-wider">Nombre del Servicio *</label>
+      <input required className="input-glass" placeholder="Ej. Sombreado, Barba Spa..." value={data.name} onChange={e => setData({...data, name: e.target.value})} />
+    </div>
+    <div className="space-y-1">
+      <label className="text-xs uppercase font-bold text-gray-400 tracking-wider">Descripción (Opcional)</label>
+      <textarea className="input-glass resize-none h-16" value={data.description} onChange={e => setData({...data, description: e.target.value})} />
+    </div>
+    <div className="grid grid-cols-2 gap-4">
+      <div className="space-y-1">
+        <label className="text-xs uppercase font-bold text-gray-400 tracking-wider">Valor Cobrado *</label>
+        <div className="relative">
+          <span className="absolute inset-y-0 left-3 flex items-center text-emerald-400 font-bold pointer-events-none">$</span>
+          <input
+            type="number" min="0" required
+            className="input-glass !pl-8 font-black text-emerald-400"
+            placeholder="20000"
+            value={data.price}
+            onChange={e => setData({...data, price: e.target.value})}
+          />
+        </div>
+      </div>
+      <div className="space-y-1">
+        <label className="text-xs uppercase font-bold text-gray-400 tracking-wider">Minutos *</label>
+        <input type="number" min="5" step="5" required className="input-glass font-bold text-purple-400" value={data.duration_minutes} onChange={e => setData({...data, duration_minutes: e.target.value})} />
+      </div>
+    </div>
+    <div className="space-y-1">
+      <label className="text-xs uppercase font-bold text-gray-400 tracking-wider">Categoría</label>
+      <select className="input-glass bg-[#151518]" value={data.category} onChange={e => setData({...data, category: e.target.value})}>
+        {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+      </select>
+    </div>
+    <button type="submit" disabled={isLoading} className="btn btn-primary w-full shadow-[4px_4px_0px_rgba(0,0,0,0.8)] mt-2">
+      {isLoading ? 'Guardando...' : btnLabel}
+    </button>
+  </form>
+);
 
 const ServicesCatalog = () => {
   const queryClient = useQueryClient();
@@ -70,15 +112,14 @@ const ServicesCatalog = () => {
 
   const handleCreate = (e) => {
     e.preventDefault();
-    // Convert price to integer to avoid decimal precision errors
-    const price = parseInt(String(formData.price).replace(/\D/g, ''), 10);
+    const price = Math.round(parseFloat(String(formData.price).replace(/[^0-9.,]/g, '').replace(',', '.')));
     if (isNaN(price) || price < 0) { toast.error('Ingresa un precio válido'); return; }
     createService.mutate({ ...formData, price });
   };
 
   const handleUpdate = (e) => {
     e.preventDefault();
-    const price = parseInt(String(editData.price).replace(/\D/g, ''), 10);
+    const price = Math.round(parseFloat(String(editData.price).replace(/[^0-9.,]/g, '').replace(',', '.')));
     if (isNaN(price) || price < 0) { toast.error('Ingresa un precio válido'); return; }
     updateService.mutate({ id: editTarget.id, ...editData, price });
   };
@@ -95,47 +136,6 @@ const ServicesCatalog = () => {
     });
     setIsEditModalOpen(true);
   };
-
-  const ServiceForm = ({ data, setData, onSubmit, isLoading, btnLabel }) => (
-    <form onSubmit={onSubmit} className="space-y-4">
-      <div className="space-y-1">
-        <label className="text-xs uppercase font-bold text-gray-400 tracking-wider">Nombre del Servicio *</label>
-        <input required className="input-glass" placeholder="Ej. Sombreado, Barba Spa..." value={data.name} onChange={e => setData({...data, name: e.target.value})} />
-      </div>
-      <div className="space-y-1">
-        <label className="text-xs uppercase font-bold text-gray-400 tracking-wider">Descripción (Opcional)</label>
-        <textarea className="input-glass resize-none h-16" value={data.description} onChange={e => setData({...data, description: e.target.value})} />
-      </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-1">
-          <label className="text-xs uppercase font-bold text-gray-400 tracking-wider">Valor Cobrado *</label>
-          <div className="relative">
-            <span className="absolute inset-y-0 left-3 flex items-center text-emerald-400 font-bold pointer-events-none">$</span>
-            <input
-              type="number" min="0" required
-              className="input-glass !pl-8 font-black text-emerald-400"
-              placeholder="20000"
-              value={data.price}
-              onChange={e => setData({...data, price: e.target.value})}
-            />
-          </div>
-        </div>
-        <div className="space-y-1">
-          <label className="text-xs uppercase font-bold text-gray-400 tracking-wider">Minutos *</label>
-          <input type="number" min="5" step="5" required className="input-glass font-bold text-purple-400" value={data.duration_minutes} onChange={e => setData({...data, duration_minutes: e.target.value})} />
-        </div>
-      </div>
-      <div className="space-y-1">
-        <label className="text-xs uppercase font-bold text-gray-400 tracking-wider">Categoría</label>
-        <select className="input-glass bg-[#151518]" value={data.category} onChange={e => setData({...data, category: e.target.value})}>
-          {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
-        </select>
-      </div>
-      <button type="submit" disabled={isLoading} className="btn btn-primary w-full shadow-[4px_4px_0px_rgba(0,0,0,0.8)] mt-2">
-        {isLoading ? 'Guardando...' : btnLabel}
-      </button>
-    </form>
-  );
 
   return (
     <div className="animate-slide-up space-y-8">

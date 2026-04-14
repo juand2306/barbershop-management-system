@@ -21,7 +21,7 @@ class AppointmentViewSet(viewsets.ModelViewSet):
         """
         if self.action in ['disponibilidad', 'reservar_online']:
             permission_classes = [permissions.AllowAny]
-        elif self.action in ['list', 'retrieve']:
+        elif self.action in ['list', 'retrieve', 'calendario']:
             permission_classes = [permissions.IsAuthenticated]
         else:
             permission_classes = [IsReceptionistOrHigher]
@@ -30,11 +30,11 @@ class AppointmentViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         # Si no hay token, asume trafico publico (web de reservas /disponibilidad o similar)
-        qs = Appointment.objects.select_related('barber', 'service')
-        
+        qs = Appointment.objects.select_related('barber', 'service', 'service_record')
+
         if self.request.user and self.request.user.is_authenticated:
              qs = qs.filter(barbershop=self.request.user.barbershop)
-        
+
         # Filtros
         status_filter = self.request.query_params.get('status')
         barber = self.request.query_params.get('barber')
@@ -57,6 +57,129 @@ class AppointmentViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(barbershop=self.request.user.barbershop)
+
+    @action(detail=False, methods=['get'], url_path='calendario')
+    def calendario(self, request):
+        """
+        Retorna los eventos del calendario combinando:
+        - Appointments (citas agendadas): tipo 'cita'
+        - ServiceRecords completados (walk-ins y citas cobradas): tipo 'servicio'
+        
+        Parametros de query:
+        - date: YYYY-MM-DD (un dia especifico)
+        - date_from / date_to: rango de fechas (YYYY-MM-DD)
+        - barber: ID del barbero (opcional para filtrar)
+        
+        Cada evento retorna:
+        {
+            "id": ..., "type": "cita"|"servicio",
+            "barber_id": ..., "barber_name": ...,
+            "client_name": ..., "service_name": ...,
+            "duration_minutes": ...,
+            "start": "ISO datetime", "end": "ISO datetime",
+            "status": ..., "notes": ...,
+            "source_id": ...  # ID del appointment o service_record original
+        }
+        """
+        from apps.service_record.models import ServiceRecord
+        from datetime import timedelta
+
+        barbershop = request.user.barbershop
+        date_str = request.query_params.get('date')
+        date_from_str = request.query_params.get('date_from')
+        date_to_str = request.query_params.get('date_to')
+        barber_id = request.query_params.get('barber')
+
+        # Determinar rango de fechas a consultar
+        if date_str:
+            try:
+                d = datetime.datetime.strptime(date_str, "%Y-%m-%d").date()
+                date_from = date_to = d
+            except ValueError:
+                return Response({"error": "Formato de fecha invalido. Use YYYY-MM-DD."}, status=400)
+        elif date_from_str and date_to_str:
+            try:
+                date_from = datetime.datetime.strptime(date_from_str, "%Y-%m-%d").date()
+                date_to = datetime.datetime.strptime(date_to_str, "%Y-%m-%d").date()
+            except ValueError:
+                return Response({"error": "Formato de fecha invalido. Use YYYY-MM-DD."}, status=400)
+        else:
+            # Por defecto: semana actual
+            today = datetime.date.today()
+            date_from = today
+            date_to = today
+
+        events = []
+
+        # --- 1. CITAS AGENDADAS (appointments) ---
+        appointments_qs = Appointment.objects.select_related('barber', 'service').filter(
+            barbershop=barbershop,
+            appointment_datetime__date__gte=date_from,
+            appointment_datetime__date__lte=date_to,
+        ).exclude(status__in=['cancelada', 'no_asistio'])
+        
+        if barber_id:
+            appointments_qs = appointments_qs.filter(barber_id=barber_id)
+
+        for appt in appointments_qs:
+            duration = appt.service.duration_minutes if appt.service else 30
+            start_dt = appt.appointment_datetime
+            end_dt = start_dt + timedelta(minutes=duration)
+            events.append({
+                "id": f"appt-{appt.id}",
+                "type": "cita",
+                "barber_id": appt.barber_id,
+                "barber_name": appt.barber.name if appt.barber else "N/A",
+                "client_name": appt.client_name,
+                "service_name": appt.service.name if appt.service else "Servicio",
+                "duration_minutes": duration,
+                "start": start_dt.isoformat(),
+                "end": end_dt.isoformat(),
+                "status": appt.status,
+                "is_online_booking": appt.is_online_booking,
+                "notes": appt.notes or "",
+                "source_id": appt.id,
+            })
+
+        # --- 2. SERVICIOS COMPLETADOS (walk-ins y atendidos ya) ---
+        records_qs = ServiceRecord.objects.select_related('barber', 'service').filter(
+            barbershop=barbershop,
+            service_datetime__date__gte=date_from,
+            service_datetime__date__lte=date_to,
+            status='completado',
+        )
+
+        if barber_id:
+            records_qs = records_qs.filter(barber_id=barber_id)
+
+        for record in records_qs:
+            duration = record.service.duration_minutes if record.service else 30
+            end_dt = record.service_datetime
+            start_dt = end_dt - timedelta(minutes=duration)
+            events.append({
+                "id": f"record-{record.id}",
+                "type": "servicio",
+                "barber_id": record.barber_id,
+                "barber_name": record.barber.name if record.barber else "N/A",
+                "client_name": record.client_name or "Cliente Walk-in",
+                "service_name": record.service.name if record.service else "Servicio",
+                "duration_minutes": duration,
+                "start": start_dt.isoformat(),
+                "end": end_dt.isoformat(),
+                "status": "completado",
+                "is_online_booking": False,
+                "notes": record.notes or "",
+                "source_id": record.id,
+            })
+
+        # Ordenar por hora de inicio
+        events.sort(key=lambda e: e['start'])
+
+        return Response({
+            "date_from": date_from.isoformat(),
+            "date_to": date_to.isoformat(),
+            "events": events,
+        })
 
     @action(detail=False, methods=['post'], url_path='reservar')
     def reservar_online(self, request):
@@ -100,3 +223,4 @@ class AppointmentViewSet(viewsets.ModelViewSet):
         appointment.save(update_fields=['status', 'updated_at'])
         
         return Response(self.get_serializer(appointment).data)
+

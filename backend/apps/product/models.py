@@ -1,3 +1,4 @@
+from django.utils import timezone
 from django.db import models
 from django.core.validators import MinValueValidator
 
@@ -131,6 +132,16 @@ class ProductSale(models.Model):
             if self.product.current_quantity < 0:
                 self.product.current_quantity = 0
             self.product.save(update_fields=['current_quantity'])
+
+    def delete(self, *args, **kwargs):
+        """
+        Si se elimina (anula) una venta, el inventario regresa al producto.
+        """
+        if self.product:
+            self.product.current_quantity += self.quantity
+            self.product.save(update_fields=['current_quantity'])
+            
+        super().delete(*args, **kwargs)
 
     def __str__(self):
         product_name = self.product.name if self.product else 'Producto eliminado'

@@ -20,6 +20,49 @@ const extractApiError = (err) => {
 
 const emptyForm = { name: '', description: '', price: '', cost_price: 0, current_quantity: 0, minimum_quantity: 5, supplier: '', active: true };
 
+// ⚠️ IMPORTANT: defined OUTSIDE ProductsCatalog so React doesn't remount (lose focus) on every keystroke
+const ProductForm = ({ data, setData, onSubmit, isLoading, btnLabel }) => (
+  <form onSubmit={onSubmit} className="space-y-4">
+    <div className="space-y-1">
+      <label className="text-xs uppercase font-bold text-gray-400 tracking-wider">Nombre del Producto *</label>
+      <input required className="input-glass" placeholder="Ej. Minoxidil Kirkland, Cera..." value={data.name} onChange={e => setData({...data, name: e.target.value})} />
+    </div>
+    <div className="grid grid-cols-2 gap-4">
+      <div className="space-y-1">
+        <label className="text-xs uppercase font-bold text-gray-400 tracking-wider">Stock Actual</label>
+        <input type="number" min="0" required className="input-glass font-bold text-emerald-400" value={data.current_quantity} onChange={e => setData({...data, current_quantity: e.target.value})} />
+      </div>
+      <div className="space-y-1">
+        <label className="text-xs uppercase font-bold text-gray-400 tracking-wider">Min. Alerta</label>
+        <input type="number" min="0" required className="input-glass font-bold text-red-400" value={data.minimum_quantity} onChange={e => setData({...data, minimum_quantity: e.target.value})} />
+      </div>
+    </div>
+    <div className="grid grid-cols-2 gap-4">
+      <div className="space-y-1">
+        <label className="text-xs uppercase font-bold text-gray-400 tracking-wider">Costo (Compra)</label>
+        <div className="relative">
+          <span className="absolute inset-y-0 left-3 flex items-center text-gray-400 font-bold pointer-events-none">$</span>
+          <input type="number" min="0" className="input-glass !pl-8" value={data.cost_price} onChange={e => setData({...data, cost_price: e.target.value})} />
+        </div>
+      </div>
+      <div className="space-y-1">
+        <label className="text-xs uppercase font-bold text-gray-400 tracking-wider">Precio Venta *</label>
+        <div className="relative">
+          <span className="absolute inset-y-0 left-3 flex items-center text-emerald-400 font-bold pointer-events-none">$</span>
+          <input type="number" min="0" required className="input-glass !pl-8 font-black text-emerald-400" value={data.price} onChange={e => setData({...data, price: e.target.value})} />
+        </div>
+      </div>
+    </div>
+    <div className="space-y-1">
+      <label className="text-xs uppercase font-bold text-gray-400 tracking-wider">Proveedor local/Marca</label>
+      <input className="input-glass" value={data.supplier} onChange={e => setData({...data, supplier: e.target.value})} />
+    </div>
+    <button type="submit" disabled={isLoading} className="btn btn-primary w-full shadow-[4px_4px_0px_rgba(0,0,0,0.8)] mt-2">
+      {isLoading ? 'Guardando...' : btnLabel}
+    </button>
+  </form>
+);
+
 const ProductsCatalog = () => {
   const queryClient = useQueryClient();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -62,16 +105,16 @@ const ProductsCatalog = () => {
 
   const handleCreate = (e) => {
     e.preventDefault();
-    const price = parseInt(String(formData.price).replace(/\D/g, ''), 10);
-    const cost_price = parseInt(String(formData.cost_price).replace(/\D/g, ''), 10) || 0;
+    const price = Math.round(parseFloat(String(formData.price).replace(/[^0-9.,]/g, '').replace(',', '.')));
+    const cost_price = Math.round(parseFloat(String(formData.cost_price || '0').replace(/[^0-9.,]/g, '').replace(',', '.'))) || 0;
     if (isNaN(price) || price < 0) { toast.error('Ingresa un precio de venta válido'); return; }
     createProduct.mutate({ ...formData, price, cost_price });
   };
 
   const handleUpdate = (e) => {
     e.preventDefault();
-    const price = parseInt(String(editData.price).replace(/\D/g, ''), 10);
-    const cost_price = parseInt(String(editData.cost_price).replace(/\D/g, ''), 10) || 0;
+    const price = Math.round(parseFloat(String(editData.price).replace(/[^0-9.,]/g, '').replace(',', '.')));
+    const cost_price = Math.round(parseFloat(String(editData.cost_price || '0').replace(/[^0-9.,]/g, '').replace(',', '.'))) || 0;
     if (isNaN(price) || price < 0) { toast.error('Ingresa un precio de venta válido'); return; }
     updateProduct.mutate({ id: editTarget.id, ...editData, price, cost_price });
   };
@@ -90,48 +133,6 @@ const ProductsCatalog = () => {
     });
     setIsEditModalOpen(true);
   };
-
-  const ProductForm = ({ data, setData, onSubmit, isLoading, btnLabel }) => (
-    <form onSubmit={onSubmit} className="space-y-4">
-      <div className="space-y-1">
-        <label className="text-xs uppercase font-bold text-gray-400 tracking-wider">Nombre del Producto *</label>
-        <input required className="input-glass" placeholder="Ej. Minoxidil Kirkland, Cera..." value={data.name} onChange={e => setData({...data, name: e.target.value})} />
-      </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-1">
-          <label className="text-xs uppercase font-bold text-gray-400 tracking-wider">Stock Actual</label>
-          <input type="number" min="0" required className="input-glass font-bold text-emerald-400" value={data.current_quantity} onChange={e => setData({...data, current_quantity: e.target.value})} />
-        </div>
-        <div className="space-y-1">
-          <label className="text-xs uppercase font-bold text-gray-400 tracking-wider">Min. Alerta</label>
-          <input type="number" min="0" required className="input-glass font-bold text-red-400" value={data.minimum_quantity} onChange={e => setData({...data, minimum_quantity: e.target.value})} />
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-1">
-          <label className="text-xs uppercase font-bold text-gray-400 tracking-wider">Costo (Compra)</label>
-          <div className="relative">
-            <span className="absolute inset-y-0 left-3 flex items-center text-gray-400 font-bold pointer-events-none">$</span>
-            <input type="number" min="0" className="input-glass !pl-8" value={data.cost_price} onChange={e => setData({...data, cost_price: e.target.value})} />
-          </div>
-        </div>
-        <div className="space-y-1">
-          <label className="text-xs uppercase font-bold text-gray-400 tracking-wider">Precio Venta *</label>
-          <div className="relative">
-            <span className="absolute inset-y-0 left-3 flex items-center text-emerald-400 font-bold pointer-events-none">$</span>
-            <input type="number" min="0" required className="input-glass !pl-8 font-black text-emerald-400" value={data.price} onChange={e => setData({...data, price: e.target.value})} />
-          </div>
-        </div>
-      </div>
-      <div className="space-y-1">
-        <label className="text-xs uppercase font-bold text-gray-400 tracking-wider">Proveedor local/Marca</label>
-        <input className="input-glass" value={data.supplier} onChange={e => setData({...data, supplier: e.target.value})} />
-      </div>
-      <button type="submit" disabled={isLoading} className="btn btn-primary w-full shadow-[4px_4px_0px_rgba(0,0,0,0.8)] mt-2">
-        {isLoading ? 'Guardando...' : btnLabel}
-      </button>
-    </form>
-  );
 
   return (
     <div className="animate-slide-up space-y-8">
@@ -153,7 +154,7 @@ const ProductsCatalog = () => {
           <div className="p-10 flex justify-center"><div className="w-8 h-8 rounded-sm bg-purple-500 animate-spin"></div></div>
         ) : (
           <div className="overflow-x-auto custom-scrollbar">
-            <table className="w-full text-left border-collapse">
+            <table className="text-left border-collapse" style={{ minWidth: '560px', width: '100%' }}>
               <thead>
                 <tr className="bg-white/5 border-b-2 border-white/10 text-xs uppercase tracking-widest text-gray-400">
                   <th className="p-4 font-bold">Producto</th>

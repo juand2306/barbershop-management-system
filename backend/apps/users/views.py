@@ -46,24 +46,30 @@ class UserViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         """
         Asigna la barbería actual al nuevo usuario creado.
+        Protección: solo un admin puede crear otro admin.
         """
-        # Proteccion extra: un manager no puede crear admins.
-        role = serializer.validated_data.get('role')
-        if role == 'admin' and self.request.user.role != 'admin':
-            role = 'manager' # Fallback seguro
-            serializer.validated_data['role'] = role
+        role = serializer.validated_data.get('role', 'receptionist')
+        requester_role = getattr(self.request.user, 'role', None)
+        
+        # Non-admins cannot create admin accounts — downgrade silently to manager
+        if role == 'admin' and requester_role != 'admin' and not self.request.user.is_superuser:
+            serializer.validated_data['role'] = 'manager'
 
         serializer.save(barbershop=self.request.user.barbershop)
 
     def perform_update(self, serializer):
         """
-        Protección en update similar.
+        Protección en update: no-admins no pueden escalar su propio rol a 'admin'.
         """
-        if 'role' in serializer.validated_data and serializer.validated_data['role'] == 'admin' and self.request.user.role != 'admin':
-             # Remover el rol del update data o forzar manager
-             serializer.validated_data.pop('role', None)
-             
+        requested_role = serializer.validated_data.get('role')
+        requester_role = getattr(self.request.user, 'role', None)
+        
+        if requested_role == 'admin' and requester_role != 'admin' and not self.request.user.is_superuser:
+            # Non-admin trying to set admin role → downgrade to manager
+            serializer.validated_data['role'] = 'manager'
+            
         serializer.save()
+
 
 
     @action(detail=False, methods=['get'])

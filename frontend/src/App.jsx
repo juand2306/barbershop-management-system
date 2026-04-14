@@ -6,14 +6,18 @@ import 'react-toastify/dist/ReactToastify.css';
 
 // Pages
 import Login from './pages/auth/Login';
+import LandingPage from './pages/Landing';
 import DashboardLayout from './layouts/DashboardLayout';
 import HomeDashboard from './pages/dashboard/Home';
 import CashRegister from './pages/dashboard/CashRegister';
 import AppointmentsList from './pages/dashboard/AppointmentsList';
+import CalendarPage from './pages/dashboard/Calendar';
 import ServicesCatalog from './pages/dashboard/ServicesCatalog';
 import ProductsCatalog from './pages/dashboard/ProductsCatalog';
 import Team from './pages/dashboard/Team';
 import Settings from './pages/dashboard/Settings';
+import HistoryPage from './pages/dashboard/History';
+import BarberStats from './pages/dashboard/BarberStats';
 const PlaceholderPage = ({ title }) => (
   <div className="flex items-center justify-center h-full">
     <div className="glass-panel p-10 text-center animate-slide-up">
@@ -32,6 +36,7 @@ const App = () => {
         <Routes>
           {/* Public Routes */}
           <Route path="/login" element={<Login />} />
+          <Route path="/booking" element={<LandingPage />} />
           
           {/* Protected Routes inside Layout */}
           <Route element={<DashboardLayout />}>
@@ -39,9 +44,12 @@ const App = () => {
             <Route path="/dashboard" element={<HomeDashboard />} />
             <Route path="/cash" element={<CashRegister />} />
             <Route path="/appointments" element={<AppointmentsList />} />
+            <Route path="/calendar" element={<CalendarPage />} />
             <Route path="/services" element={<ServicesCatalog />} />
             <Route path="/products" element={<ProductsCatalog />} />
             <Route path="/team" element={<Team />} />
+            <Route path="/history" element={<HistoryPage />} />
+            <Route path="/barber-stats" element={<BarberStats />} />
             <Route path="/settings" element={<Settings />} />
           </Route>
 

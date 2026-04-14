@@ -89,17 +89,21 @@ class AdvanceViewSet(viewsets.ModelViewSet):
 
         payment_data = {
             'advance': advance.id,
-            'barber': advance.barber.id,
             'amount': amount,
             'payment_method': request.data.get('payment_method'),
             'notes': request.data.get('notes', ''),
-            'payment_date': request.data.get('payment_date'),
         }
+
+        # Solo incluir payment_date si se envia explicitamente
+        payment_date = request.data.get('payment_date')
+        if payment_date:
+            payment_data['payment_date'] = payment_date
 
         serializer = AdvancePaymentSerializer(data=payment_data, context={'request': request})
         serializer.is_valid(raise_exception=True)
         serializer.save(
             barbershop=request.user.barbershop,
+            barber=advance.barber,          # <- FIX: barber is read_only, must pass here
             registered_by=request.user
         )
 
@@ -109,6 +113,7 @@ class AdvanceViewSet(viewsets.ModelViewSet):
             AdvanceSerializer(advance, context={'request': request}).data,
             status=status.HTTP_201_CREATED
         )
+
 
 
 class AdvancePaymentViewSet(viewsets.ReadOnlyModelViewSet):
