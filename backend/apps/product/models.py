@@ -92,7 +92,13 @@ class ProductSale(models.Model):
         'payment_method.PaymentMethod',
         on_delete=models.SET_NULL,
         null=True,
+        blank=True,
         related_name='product_sales'
+    )
+    is_mixed_payment = models.BooleanField(
+        default=False,
+        verbose_name='Pago mixto',
+        help_text='True cuando el pago se divide entre varios métodos de pago'
     )
 
     # Permite editar la fecha si se registro despues de ocurrir el evento
@@ -146,3 +152,35 @@ class ProductSale(models.Model):
     def __str__(self):
         product_name = self.product.name if self.product else 'Producto eliminado'
         return f"Venta {product_name} x{self.quantity} | {self.sale_date}"
+
+
+class ProductSalePaymentSplit(models.Model):
+    """
+    División de pago para una ProductSale con pago mixto.
+    Cuando is_mixed_payment=True en la venta padre, el total
+    se desglosa en N filas aquí (una por método de pago utilizado).
+    """
+    product_sale = models.ForeignKey(
+        ProductSale,
+        on_delete=models.CASCADE,
+        related_name='payment_splits'
+    )
+    payment_method = models.ForeignKey(
+        'payment_method.PaymentMethod',
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='product_sale_splits'
+    )
+    amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        verbose_name='Monto pagado con este método'
+    )
+
+    class Meta:
+        verbose_name = 'División de Pago (Venta)'
+        verbose_name_plural = 'Divisiones de Pago (Ventas)'
+
+    def __str__(self):
+        method_name = self.payment_method.name if self.payment_method else 'N/A'
+        return f"Split {method_name}: ${self.amount} → PS#{self.product_sale_id}"
