@@ -4,8 +4,99 @@ import api from '../../api/axios';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { toast } from 'react-toastify';
-import { Calculator, DollarSign, Wallet, ArrowDown, ArrowUp, Scissors, Package, Receipt, LogOut, CreditCard, Edit3, FileDown } from 'lucide-react';
+import { Calculator, DollarSign, Wallet, ArrowDown, ArrowUp, Scissors, Package, Receipt, LogOut, CreditCard, Edit3, FileDown, Plus, Trash2, SplitSquareHorizontal } from 'lucide-react';
 import Modal from '../../components/Modal';
+
+// ─── Mixed Payment UI Component ───────────────────────────────────────────────
+const MixedPaymentSelector = ({ total, splits, onSplitsChange, paymentMethods }) => {
+  const totalSplits = splits.reduce((acc, s) => acc + (parseFloat(s.amount) || 0), 0);
+  const remaining = parseFloat(total || 0) - totalSplits;
+  const isBalanced = Math.abs(remaining) < 0.01;
+
+  const addSplit = () => {
+    onSplitsChange([...splits, { payment_method: '', amount: '' }]);
+  };
+
+  const removeSplit = (idx) => {
+    onSplitsChange(splits.filter((_, i) => i !== idx));
+  };
+
+  const updateSplit = (idx, field, value) => {
+    const updated = splits.map((s, i) => i === idx ? { ...s, [field]: value } : s);
+    onSplitsChange(updated);
+  };
+
+  const fillRemaining = (idx) => {
+    if (remaining > 0) {
+      const current = parseFloat(splits[idx].amount) || 0;
+      updateSplit(idx, 'amount', String((current + remaining).toFixed(0)));
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      {splits.map((split, idx) => (
+        <div key={idx} className="flex gap-2 items-center">
+          <select
+            className="input-glass flex-1 text-sm"
+            value={split.payment_method}
+            onChange={e => updateSplit(idx, 'payment_method', e.target.value)}
+            required
+          >
+            <option value="">Método...</option>
+            {paymentMethods?.map(p => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+          <div className="relative flex-1">
+            <input
+              type="number"
+              min="0.01"
+              step="1"
+              className="input-glass w-full text-sm pr-16 font-bold"
+              value={split.amount}
+              onChange={e => updateSplit(idx, 'amount', e.target.value)}
+              placeholder="Monto"
+              required
+            />
+            {remaining > 0.01 && (
+              <button
+                type="button"
+                onClick={() => fillRemaining(idx)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-emerald-400 font-black uppercase tracking-wider hover:text-emerald-300 whitespace-nowrap"
+                title="Completar con el restante"
+              >
+                +REST
+              </button>
+            )}
+          </div>
+          {splits.length > 2 && (
+            <button type="button" onClick={() => removeSplit(idx)} className="text-red-400 hover:text-red-300 p-1 flex-shrink-0">
+              <Trash2 className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+      ))}
+
+      <div className="flex items-center justify-between">
+        <button
+          type="button"
+          onClick={addSplit}
+          className="flex items-center gap-1 text-xs text-purple-400 hover:text-purple-300 font-black uppercase tracking-wider"
+        >
+          <Plus className="w-3 h-3" /> Agregar método
+        </button>
+        <div className={`text-xs font-black uppercase tracking-wider ${isBalanced ? 'text-emerald-400' : remaining > 0 ? 'text-yellow-400' : 'text-red-400'}`}>
+          {isBalanced
+            ? '✓ CUADRADO'
+            : remaining > 0
+            ? `FALTA: $${Math.round(remaining).toLocaleString()}`
+            : `EXCEDE: $${Math.round(Math.abs(remaining)).toLocaleString()}`}
+        </div>
+      </div>
+    </div>
+  );
+};
 
 // Helper to extract DRF error messages
 const extractApiError = (err) => {
@@ -201,8 +292,12 @@ const CashRegister = () => {
 
   // ── Form states ───────────────────────────────────────────────────
   const [serviceForm, setServiceForm] = useState({ barber: '', service: '', price_charged: '', payment_method: '', client_name: '' });
+  const [serviceMixed, setServiceMixed] = useState(false);
+  const [serviceSplits, setServiceSplits] = useState([{ payment_method: '', amount: '' }, { payment_method: '', amount: '' }]);
 
   const [productForm, setProductForm] = useState({ product: '', seller: '', quantity: 1, unit_price: '', payment_method: '' });
+  const [productMixed, setProductMixed] = useState(false);
+  const [productSplits, setProductSplits] = useState([{ payment_method: '', amount: '' }, { payment_method: '', amount: '' }]);
 
   // expense fields aligned to backend model: detail (not description), expense_date required
   const [expenseForm, setExpenseForm] = useState({ detail: '', amount: '', category: 'otro', payment_method: '' });
@@ -238,6 +333,8 @@ const CashRegister = () => {
       toast.success('✅ Servicio cobrado exitosamente');
       setActiveModal(null);
       setServiceForm({ barber: '', service: '', price_charged: '', payment_method: '', client_name: '' });
+      setServiceMixed(false);
+      setServiceSplits([{ payment_method: '', amount: '' }, { payment_method: '', amount: '' }]);
     },
     onError: (err) => toast.error(extractApiError(err))
   });
@@ -248,6 +345,8 @@ const CashRegister = () => {
       toast.success('✅ Venta registrada');
       setActiveModal(null);
       setProductForm({ product: '', seller: '', quantity: 1, unit_price: '', payment_method: '' });
+      setProductMixed(false);
+      setProductSplits([{ payment_method: '', amount: '' }, { payment_method: '', amount: '' }]);
     },
     onError: (err) => toast.error(extractApiError(err))
   });
@@ -318,28 +417,59 @@ const CashRegister = () => {
     e.preventDefault();
     const price = parseFloat(serviceForm.price_charged);
     if (isNaN(price) || price < 0) { toast.error('Ingresa un precio válido'); return; }
-    if (!serviceForm.payment_method) { toast.error('Selecciona un método de pago. Si no hay, créalo en Configuración.'); return; }
-    createService.mutate({ ...serviceForm, price_charged: price });
+
+    if (serviceMixed) {
+      const validSplits = serviceSplits.filter(s => s.payment_method && s.amount);
+      if (validSplits.length < 2) { toast.error('El pago mixto requiere al menos 2 métodos con montos'); return; }
+      const totalSplits = validSplits.reduce((acc, s) => acc + parseFloat(s.amount), 0);
+      if (Math.abs(totalSplits - price) > 0.01) { toast.error(`Los montos deben sumar exactamente $${price.toLocaleString()}`); return; }
+      createService.mutate({
+        barber: serviceForm.barber,
+        service: serviceForm.service,
+        price_charged: price,
+        client_name: serviceForm.client_name,
+        payment_splits: validSplits.map(s => ({ payment_method: parseInt(s.payment_method), amount: parseFloat(s.amount) })),
+      });
+    } else {
+      if (!serviceForm.payment_method) { toast.error('Selecciona un método de pago. Si no hay, créalo en Configuración.'); return; }
+      createService.mutate({ ...serviceForm, price_charged: price });
+    }
   };
 
   const handleProductSubmit = (e) => {
     e.preventDefault();
-    if (!productForm.payment_method) { toast.error('Selecciona un método de pago. Si no hay, créalo en Configuración.'); return; }
-    
     const unitPrice = parseFloat(productForm.unit_price);
     const quantity = parseInt(productForm.quantity);
-    
+
     if (isNaN(unitPrice) || unitPrice < 0) { toast.error('Ingresa un precio unitario válido'); return; }
     if (isNaN(quantity) || quantity < 1) { toast.error('Ingresa una cantidad válida'); return; }
-    
-    createProductSale.mutate({
-      product: productForm.product,
-      barber: productForm.seller || null,  // Ahora es 'seller', no 'barber'
-      quantity: quantity,
-      unit_price: unitPrice,
-      payment_method: productForm.payment_method,
-      sale_date: todayStr,  // Agregar fecha de venta
-    });
+
+    const totalPrice = Math.max(0, quantity * unitPrice);
+
+    if (productMixed) {
+      const validSplits = productSplits.filter(s => s.payment_method && s.amount);
+      if (validSplits.length < 2) { toast.error('El pago mixto requiere al menos 2 métodos con montos'); return; }
+      const totalSplits = validSplits.reduce((acc, s) => acc + parseFloat(s.amount), 0);
+      if (Math.abs(totalSplits - totalPrice) > 0.01) { toast.error(`Los montos deben sumar exactamente $${totalPrice.toLocaleString()}`); return; }
+      createProductSale.mutate({
+        product: productForm.product,
+        barber: productForm.seller || null,
+        quantity,
+        unit_price: unitPrice,
+        sale_date: todayStr,
+        payment_splits: validSplits.map(s => ({ payment_method: parseInt(s.payment_method), amount: parseFloat(s.amount) })),
+      });
+    } else {
+      if (!productForm.payment_method) { toast.error('Selecciona un método de pago. Si no hay, créalo en Configuración.'); return; }
+      createProductSale.mutate({
+        product: productForm.product,
+        barber: productForm.seller || null,
+        quantity,
+        unit_price: unitPrice,
+        payment_method: productForm.payment_method,
+        sale_date: todayStr,
+      });
+    }
   };
 
   const handleExpenseSubmit = (e) => {
@@ -590,7 +720,7 @@ const CashRegister = () => {
       {/* ── MODALES ── */}
 
       {/* 1. Registrar Corte */}
-      <Modal isOpen={activeModal === 'service'} onClose={() => setActiveModal(null)} title="Registrar Corte (Ingreso)">
+      <Modal isOpen={activeModal === 'service'} onClose={() => { setActiveModal(null); setServiceMixed(false); setServiceSplits([{ payment_method: '', amount: '' }, { payment_method: '', amount: '' }]); }} title="Registrar Corte (Ingreso)">
         <form onSubmit={handleServiceSubmit} className="space-y-4">
           <div className="p-3 bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs font-bold uppercase tracking-wider">
             ⚠ El barbero debe tener marcada su entrada del día para poder registrar un corte.
@@ -613,13 +743,43 @@ const CashRegister = () => {
             <label className="text-xs uppercase font-bold text-gray-400 tracking-wider">Precio Cobrado Real *</label>
             <input type="number" required min="0" className="input-glass text-emerald-400 text-lg font-black" value={serviceForm.price_charged} onChange={e => setServiceForm({...serviceForm, price_charged: e.target.value})} placeholder="25000" />
           </div>
-          <div className="space-y-1">
-            <label className="text-xs uppercase font-bold text-gray-400 tracking-wider">Método de Pago *</label>
-            <select className="input-glass" value={serviceForm.payment_method} onChange={e => setServiceForm({...serviceForm, payment_method: e.target.value})}>
-              <option value="">Seleccione método de pago...</option>
-              {paymentMethods?.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
+
+          {/* Toggle pago mixto */}
+          <div className="flex items-center justify-between p-3 bg-white/5 border border-white/10 rounded-sm">
+            <div className="flex items-center gap-2">
+              <SplitSquareHorizontal className="w-4 h-4 text-purple-400" />
+              <span className="text-xs font-black uppercase tracking-wider text-gray-300">Pago Mixto (Efectivo + Transfer)</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setServiceMixed(v => !v)}
+              className={`relative w-11 h-6 rounded-full transition-colors focus:outline-none ${serviceMixed ? 'bg-purple-600' : 'bg-white/20'}`}
+            >
+              <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${serviceMixed ? 'translate-x-5' : 'translate-x-0'}`} />
+            </button>
           </div>
+
+          {/* Método de pago: simple o mixto */}
+          {serviceMixed ? (
+            <div className="space-y-2">
+              <label className="text-xs uppercase font-bold text-gray-400 tracking-wider">División del Pago *</label>
+              <MixedPaymentSelector
+                total={serviceForm.price_charged}
+                splits={serviceSplits}
+                onSplitsChange={setServiceSplits}
+                paymentMethods={paymentMethods}
+              />
+            </div>
+          ) : (
+            <div className="space-y-1">
+              <label className="text-xs uppercase font-bold text-gray-400 tracking-wider">Método de Pago *</label>
+              <select className="input-glass" value={serviceForm.payment_method} onChange={e => setServiceForm({...serviceForm, payment_method: e.target.value})}>
+                <option value="">Seleccione método de pago...</option>
+                {paymentMethods?.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </div>
+          )}
+
           <div className="space-y-1">
             <label className="text-xs uppercase font-bold text-gray-400 tracking-wider">Cliente (Opcional)</label>
             <input type="text" className="input-glass" value={serviceForm.client_name} onChange={e => setServiceForm({...serviceForm, client_name: e.target.value})} placeholder="Juan Pérez o vacío" />
@@ -631,14 +791,14 @@ const CashRegister = () => {
       </Modal>
 
       {/* 2. Vender Producto */}
-      <Modal isOpen={activeModal === 'product'} onClose={() => setActiveModal(null)} title="Venta de Producto">
+      <Modal isOpen={activeModal === 'product'} onClose={() => { setActiveModal(null); setProductMixed(false); setProductSplits([{ payment_method: '', amount: '' }, { payment_method: '', amount: '' }]); }} title="Venta de Producto">
         <form onSubmit={handleProductSubmit} className="space-y-4">
           <div className="space-y-1">
             <label className="text-xs uppercase font-bold text-gray-400 tracking-wider">Producto *</label>
-            <select 
-              className="input-glass" 
-              required 
-              value={productForm.product} 
+            <select
+              className="input-glass"
+              required
+              value={productForm.product}
               onChange={(e) => handleProductSelect(e.target.value)}
             >
               <option value="">Seleccione un producto...</option>
@@ -651,9 +811,9 @@ const CashRegister = () => {
           </div>
           <div className="space-y-1">
             <label className="text-xs uppercase font-bold text-gray-400 tracking-wider">Vendedor de Productos (Opcional)</label>
-            <select 
-              className="input-glass" 
-              value={productForm.seller} 
+            <select
+              className="input-glass"
+              value={productForm.seller}
               onChange={(e) => setProductForm({...productForm, seller: e.target.value})}
             >
               <option value="">Sin asignar</option>
@@ -663,43 +823,80 @@ const CashRegister = () => {
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
               <label className="text-xs uppercase font-bold text-gray-400 tracking-wider">Cantidad *</label>
-              <input 
-                type="number" 
-                min="1" 
-                required 
-                className="input-glass font-bold" 
-                value={productForm.quantity} 
-                onChange={e => setProductForm({...productForm, quantity: e.target.value})} 
+              <input
+                type="number"
+                min="1"
+                required
+                className="input-glass font-bold"
+                value={productForm.quantity}
+                onChange={e => setProductForm({...productForm, quantity: e.target.value})}
               />
             </div>
             <div className="space-y-1">
               <label className="text-xs uppercase font-bold text-gray-400 tracking-wider">Precio Unitario *</label>
-              <input 
-                type="number" 
-                min="0" 
-                required 
-                className="input-glass text-cyan-400 font-bold" 
-                value={productForm.unit_price} 
-                onChange={e => setProductForm({...productForm, unit_price: e.target.value})} 
+              <input
+                type="number"
+                min="0"
+                required
+                className="input-glass text-cyan-400 font-bold"
+                value={productForm.unit_price}
+                onChange={e => setProductForm({...productForm, unit_price: e.target.value})}
                 placeholder="Auto-completado con el precio del producto"
               />
             </div>
           </div>
-          <div className="space-y-1">
-            <label className="text-xs uppercase font-bold text-gray-400 tracking-wider">Método de Pago *</label>
-            <select 
-              className="input-glass" 
-              required
-              value={productForm.payment_method} 
-              onChange={e => setProductForm({...productForm, payment_method: e.target.value})}
+
+          {/* Total calculado */}
+          {productForm.unit_price && (
+            <div className="p-2 bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-xs font-black uppercase tracking-wider text-center">
+              TOTAL: ${Math.max(0, parseInt(productForm.quantity || 1) * parseFloat(productForm.unit_price || 0)).toLocaleString()}
+            </div>
+          )}
+
+          {/* Toggle pago mixto */}
+          <div className="flex items-center justify-between p-3 bg-white/5 border border-white/10 rounded-sm">
+            <div className="flex items-center gap-2">
+              <SplitSquareHorizontal className="w-4 h-4 text-cyan-400" />
+              <span className="text-xs font-black uppercase tracking-wider text-gray-300">Pago Mixto (Efectivo + Transfer)</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setProductMixed(v => !v)}
+              className={`relative w-11 h-6 rounded-full transition-colors focus:outline-none ${productMixed ? 'bg-cyan-600' : 'bg-white/20'}`}
             >
-              <option value="">Seleccione método de pago...</option>
-              {paymentMethods?.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
+              <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${productMixed ? 'translate-x-5' : 'translate-x-0'}`} />
+            </button>
           </div>
-          <button 
-            type="submit" 
-            disabled={createProductSale.isLoading} 
+
+          {/* Método de pago: simple o mixto */}
+          {productMixed ? (
+            <div className="space-y-2">
+              <label className="text-xs uppercase font-bold text-gray-400 tracking-wider">División del Pago *</label>
+              <MixedPaymentSelector
+                total={Math.max(0, parseInt(productForm.quantity || 1) * parseFloat(productForm.unit_price || 0))}
+                splits={productSplits}
+                onSplitsChange={setProductSplits}
+                paymentMethods={paymentMethods}
+              />
+            </div>
+          ) : (
+            <div className="space-y-1">
+              <label className="text-xs uppercase font-bold text-gray-400 tracking-wider">Método de Pago *</label>
+              <select
+                className="input-glass"
+                required={!productMixed}
+                value={productForm.payment_method}
+                onChange={e => setProductForm({...productForm, payment_method: e.target.value})}
+              >
+                <option value="">Seleccione método de pago...</option>
+                {paymentMethods?.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={createProductSale.isLoading}
             className="btn bg-cyan-600 hover:bg-cyan-500 text-white w-full py-4 mt-2 shadow-[4px_4px_0px_rgba(0,0,0,1)] font-black uppercase tracking-widest"
           >
             {createProductSale.isLoading ? 'GUARDANDO...' : 'REGISTRAR VENTA'}

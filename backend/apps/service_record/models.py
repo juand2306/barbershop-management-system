@@ -52,7 +52,13 @@ class ServiceRecord(models.Model):
         'payment_method.PaymentMethod',
         on_delete=models.SET_NULL,
         null=True,
+        blank=True,
         related_name='service_records'
+    )
+    is_mixed_payment = models.BooleanField(
+        default=False,
+        verbose_name='Pago mixto',
+        help_text='True cuando el pago se divide entre varios métodos de pago'
     )
 
     # Nombre del cliente (si aplica — puede ser walk-in anonimo)
@@ -89,3 +95,35 @@ class ServiceRecord(models.Model):
         barber_name = self.barber.name if self.barber else 'N/A'
         service_name = self.service.name if self.service else 'Servicio eliminado'
         return f"{service_name} | {barber_name} | {self.service_datetime.strftime('%Y-%m-%d %H:%M')}"
+
+
+class ServiceRecordPaymentSplit(models.Model):
+    """
+    División de pago para un ServiceRecord con pago mixto.
+    Cuando is_mixed_payment=True en el registro padre, el pago total
+    se desglosa en N filas aquí (una por método de pago utilizado).
+    """
+    service_record = models.ForeignKey(
+        ServiceRecord,
+        on_delete=models.CASCADE,
+        related_name='payment_splits'
+    )
+    payment_method = models.ForeignKey(
+        'payment_method.PaymentMethod',
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='service_splits'
+    )
+    amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        verbose_name='Monto pagado con este método'
+    )
+
+    class Meta:
+        verbose_name = 'División de Pago (Servicio)'
+        verbose_name_plural = 'Divisiones de Pago (Servicios)'
+
+    def __str__(self):
+        method_name = self.payment_method.name if self.payment_method else 'N/A'
+        return f"Split {method_name}: ${self.amount} → SR#{self.service_record_id}"
