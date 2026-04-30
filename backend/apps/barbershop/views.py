@@ -55,7 +55,7 @@ class BarbershopViewSet(viewsets.ModelViewSet):
 
         # Barberos activos
         barbers = Barber.objects.filter(barbershop=barbershop, active=True).values(
-            'id', 'name', 'specialty'
+            'id', 'name', 'specialty', 'photo_url'
         )
 
         return Response({

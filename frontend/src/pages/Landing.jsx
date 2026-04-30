@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import axios from 'axios';
+import BarberAvatar from '../components/BarberAvatar';
 import {
   Scissors, Clock, MapPin, Phone, Star, Calendar,
   CheckCircle, ChevronRight, ChevronLeft, User, ArrowRight,
@@ -119,9 +120,12 @@ const FieldInput = ({ label, required, type = 'text', placeholder, value, onChan
 
 const BarberBadge = ({ barber }) => (
   <div className="flex items-center gap-3 p-3 rounded-xl border border-cyan-500/25 bg-cyan-500/8 mb-3">
-    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-600 to-cyan-600 flex items-center justify-center font-black text-base text-white flex-shrink-0">
-      {barber.name[0].toUpperCase()}
-    </div>
+    <BarberAvatar
+      name={barber.name}
+      photoUrl={barber.photo_url}
+      className="w-10 h-10 rounded-full flex-shrink-0"
+      style={{ background: 'linear-gradient(135deg, #7c3aed, #06b6d4)' }}
+    />
     <div className="flex-1 min-w-0">
       <p className="text-[10px] text-cyan-400 font-black uppercase tracking-widest">Tu barbero</p>
       <p className="text-white font-black uppercase tracking-tight truncate">{barber.name}</p>
@@ -314,9 +318,13 @@ const LandingPage = () => {
             className={`cursor-pointer rounded-xl p-4 text-center border transition-all duration-200 ${
               selBarber?.id === b.id ? 'border-purple-500 bg-purple-500/10' : 'border-white/10 bg-white/[0.02] hover:border-purple-500/40'
             }`}>
-            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-600 to-cyan-600 flex items-center justify-center mx-auto mb-2 font-black text-xl text-white">
-              {b.name[0].toUpperCase()}
-            </div>
+            <BarberAvatar
+              name={b.name}
+              photoUrl={b.photo_url}
+              className="w-12 h-12 rounded-full mx-auto mb-2"
+              style={{ background: 'linear-gradient(135deg, #7c3aed, #06b6d4)' }}
+              textSize="text-xl"
+            />
             <p className="font-black text-white text-sm uppercase tracking-tight leading-tight">{b.name}</p>
             {b.specialty && <p className="text-[11px] text-gray-500 mt-0.5">{b.specialty}</p>}
             {selBarber?.id === b.id && <CheckCircle className="w-4 h-4 text-purple-400 mx-auto mt-2" />}
@@ -403,10 +411,13 @@ const LandingPage = () => {
           </div>
 
           {/* Avatar */}
-          <div className="w-32 h-32 rounded-3xl flex items-center justify-center font-black text-5xl text-white mb-6 relative z-10"
-            style={{ background: 'linear-gradient(135deg, #7c3aed, #06b6d4)', boxShadow: '0 0 80px rgba(168,85,247,0.4), 0 20px 60px rgba(0,0,0,0.6)' }}>
-            {selBarber.name[0].toUpperCase()}
-          </div>
+          <BarberAvatar
+            name={selBarber.name}
+            photoUrl={selBarber.photo_url}
+            className="w-32 h-32 rounded-3xl mb-6 relative z-10"
+            style={{ background: 'linear-gradient(135deg, #7c3aed, #06b6d4)', boxShadow: '0 0 80px rgba(168,85,247,0.4), 0 20px 60px rgba(0,0,0,0.6)' }}
+            textSize="text-5xl"
+          />
 
           <h1 className="text-4xl md:text-6xl font-black uppercase tracking-tighter text-white mb-2"
             style={{ textShadow: '0 0 60px rgba(168,85,247,0.35)' }}>
@@ -659,10 +670,14 @@ const LandingPage = () => {
               return (
                 <div key={b.id} onClick={() => openBookingWith()}
                   className="group cursor-pointer text-center rounded-2xl p-6 border border-white/[0.07] bg-white/[0.015] hover:border-purple-500/30 transition-all duration-300 hover:-translate-y-2 w-full sm:w-48">
-                  <div className="w-24 h-24 rounded-2xl flex items-center justify-center mx-auto mb-4 font-black text-3xl text-white transition-all group-hover:scale-105"
-                    style={{ background: `linear-gradient(135deg, ${color}cc, ${color}44)`, boxShadow: `0 0 30px ${color}30` }}>
-                    {b.name[0].toUpperCase()}
-                  </div>
+                  <BarberAvatar
+                    name={b.name}
+                    photoUrl={b.photo_url}
+                    className="w-24 h-24 rounded-2xl mx-auto mb-4 transition-all group-hover:scale-105"
+                    color={color}
+                    style={{ boxShadow: `0 0 30px ${color}30` }}
+                    textSize="text-3xl"
+                  />
                   <p className="font-black text-white uppercase tracking-tight text-lg leading-tight">{b.name}</p>
                   {b.specialty && <p className="text-xs font-bold uppercase tracking-widest mt-1" style={{ color }}>{b.specialty}</p>}
                   <div className="mt-4 flex items-center justify-center gap-1 text-[10px] font-black text-gray-600 group-hover:text-purple-400 uppercase tracking-widest transition-colors">

@@ -14,7 +14,8 @@ class Barber(models.Model):
     phone = models.CharField(max_length=20, blank=True)
     document_id = models.CharField(max_length=50, blank=True)
     specialty = models.CharField(max_length=100, blank=True, default='')
-    
+    photo_url = models.URLField(blank=True, default='')
+
     commission_percentage = models.DecimalField(
         max_digits=5,
         decimal_places=2,

@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import api from '../../api/axios';
+import BarberAvatar from '../../components/BarberAvatar';
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, RadarChart, PolarGrid, PolarAngleAxis, Radar,
@@ -121,8 +122,8 @@ const BarberStats = () => {
       .map(b => ({
         ...b,
         avgRevenue: b.services > 0 ? b.revenue / b.services : 0,
-        // Enrich with specialty from barberList
         specialty: barberList?.find(bl => bl.id === b.id)?.specialty || '',
+        photo_url: barberList?.find(bl => bl.id === b.id)?.photo_url || null,
       }))
       .sort((a, b) => b.revenue - a.revenue);
   }, [records, barberList]);
@@ -238,10 +239,14 @@ const BarberStats = () => {
 
                     <div className={`text-2xl mb-2 font-black ${medal.text}`}>{medal.label}</div>
 
-                    <div className="w-12 h-12 rounded-2xl flex items-center justify-center font-black text-2xl text-white mb-2 flex-shrink-0"
-                      style={{ background: `linear-gradient(135deg, ${color}cc, ${color}66)`, boxShadow: `0 0 25px ${color}40` }}>
-                      {barber.name[0].toUpperCase()}
-                    </div>
+                    <BarberAvatar
+                      name={barber.name}
+                      photoUrl={barber.photo_url}
+                      className="w-12 h-12 rounded-2xl mb-2 flex-shrink-0"
+                      color={color}
+                      style={{ boxShadow: `0 0 25px ${color}40` }}
+                      textSize="text-2xl"
+                    />
 
                     <h3 className={`font-black uppercase tracking-tight text-base leading-tight mb-0.5 ${medal.text}`}>
                       {barber.name.split(' ')[0]}
@@ -380,10 +385,14 @@ const BarberStats = () => {
                   <div key={barber.id} className="glass-panel p-5 border-white/[0.07] hover:border-white/15 transition-all">
                     {/* Header */}
                     <div className="flex items-center gap-3 mb-4">
-                      <div className="w-12 h-12 rounded-xl flex items-center justify-center font-black text-xl text-white flex-shrink-0"
-                        style={{ background: `linear-gradient(135deg, ${color}cc, ${color}44)`, boxShadow: `0 0 20px ${color}30` }}>
-                        {barber.name[0].toUpperCase()}
-                      </div>
+                      <BarberAvatar
+                        name={barber.name}
+                        photoUrl={barber.photo_url}
+                        className="w-12 h-12 rounded-xl flex-shrink-0"
+                        color={color}
+                        style={{ boxShadow: `0 0 20px ${color}30` }}
+                        textSize="text-xl"
+                      />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <p className="font-black text-white uppercase tracking-tight truncate">{barber.name}</p>

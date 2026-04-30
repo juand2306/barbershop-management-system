@@ -51,8 +51,8 @@ const MixedPaymentSelector = ({ total, splits, onSplitsChange, paymentMethods })
           <div className="relative flex-1">
             <input
               type="number"
-              min="0.01"
-              step="1"
+              min="1"
+              step="any"
               className="input-glass w-full text-sm pr-16 font-bold"
               value={split.amount}
               onChange={e => updateSplit(idx, 'amount', e.target.value)}

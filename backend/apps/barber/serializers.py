@@ -8,18 +8,19 @@ class BarberSerializer(serializers.ModelSerializer):
         model = Barber
         fields = (
             'id', 'barbershop', 'name', 'phone', 'document_id', 'specialty',
-            'commission_percentage', 'active', 'created_at', 'updated_at'
+            'commission_percentage', 'active', 'photo_url', 'created_at', 'updated_at'
         )
-        read_only_fields = ('id', 'barbershop', 'created_at', 'updated_at')
+        read_only_fields = ('id', 'barbershop', 'photo_url', 'created_at', 'updated_at')
 
 
 class BarberDailyActiveSerializer(serializers.ModelSerializer):
     barber_name = serializers.CharField(source='barber.name', read_only=True)
+    barber_photo_url = serializers.CharField(source='barber.photo_url', read_only=True)
 
     class Meta:
         model = BarberDailyActive
         fields = (
-            'id', 'barber', 'barber_name', 'barbershop', 'work_date',
+            'id', 'barber', 'barber_name', 'barber_photo_url', 'barbershop', 'work_date',
             'entry_time', 'exit_time', 'is_active', 'created_at'
         )
         read_only_fields = ('id', 'barbershop', 'created_at')

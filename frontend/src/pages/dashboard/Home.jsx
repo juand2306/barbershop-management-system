@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import api from '../../api/axios';
+import BarberAvatar from '../../components/BarberAvatar';
 import {
   ResponsiveContainer, AreaChart, Area, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell, Legend
@@ -333,9 +334,13 @@ const HomeDashboard = () => {
                 {barbersActive.map(log => (
                   <li key={log.id} className="flex items-center justify-between p-2.5 rounded-lg bg-white/[0.03] border border-white/5">
                     <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-600 to-cyan-600 flex items-center justify-center font-black text-xs text-white">
-                        {(log.barber_name || '?')[0].toUpperCase()}
-                      </div>
+                      <BarberAvatar
+                        name={log.barber_name || '?'}
+                        photoUrl={log.barber_photo_url}
+                        className="w-7 h-7 rounded-full flex-shrink-0"
+                        style={{ background: 'linear-gradient(135deg, #7c3aed, #06b6d4)' }}
+                        textSize="text-xs"
+                      />
                       <span className="font-bold text-white text-xs uppercase tracking-wide">{log.barber_name}</span>
                     </div>
                     <span className="text-emerald-400 text-[10px] font-black">{String(log.entry_time || '').split('.')[0]}</span>

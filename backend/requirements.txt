@@ -20,3 +20,6 @@ redis>=4.5
 
 # Servidor de produccion
 gunicorn>=20.1
+
+# Cloudinary (almacenamiento de fotos)
+cloudinary>=1.36.0

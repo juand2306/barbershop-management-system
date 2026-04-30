@@ -1,8 +1,10 @@
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.parsers import MultiPartParser, FormParser
 from django.utils import timezone
 import datetime
+import cloudinary.uploader
 
 from .models import Barber, BarberDailyActive
 from .serializers import BarberSerializer, BarberDailyActiveSerializer
@@ -45,6 +47,40 @@ class BarberViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(barbershop=self.request.user.barbershop)
+
+    @action(detail=True, methods=['post'], url_path='upload-photo',
+            parser_classes=[MultiPartParser, FormParser])
+    def upload_photo(self, request, pk=None):
+        """
+        Sube o reemplaza la foto de perfil de un barbero a Cloudinary.
+        Recibe multipart/form-data con el campo 'photo'.
+        """
+        barber = self.get_object()
+        photo_file = request.FILES.get('photo')
+
+        if not photo_file:
+            return Response({'error': 'No se proporcionó ninguna foto.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if photo_file.size > 5 * 1024 * 1024:
+            return Response({'error': 'La foto no puede superar los 5 MB.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            result = cloudinary.uploader.upload(
+                photo_file,
+                folder='barbershop/barbers',
+                public_id=f'barber_{barber.id}',
+                overwrite=True,
+                transformation=[
+                    {'width': 400, 'height': 400, 'crop': 'fill', 'gravity': 'face', 'quality': 'auto', 'fetch_format': 'auto'}
+                ],
+            )
+        except Exception as e:
+            return Response({'error': f'Error al subir la foto: {str(e)}'}, status=status.HTTP_502_BAD_GATEWAY)
+
+        barber.photo_url = result['secure_url']
+        barber.save(update_fields=['photo_url'])
+
+        return Response(BarberSerializer(barber).data, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=['get'], url_path='activos-hoy')
     def activos_hoy(self, request):
