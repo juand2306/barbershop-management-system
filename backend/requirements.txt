@@ -21,5 +21,14 @@ redis>=4.5
 # Servidor de produccion
 gunicorn>=20.1
 
+# Base de datos PostgreSQL (produccion)
+psycopg2-binary>=2.9
+
+# Archivos estaticos en produccion (sin necesidad de nginx)
+whitenoise>=6.5
+
+# Parseo de DATABASE_URL que inyecta Railway
+dj-database-url>=2.0
+
 # Cloudinary (almacenamiento de fotos)
 cloudinary>=1.36.0

@@ -24,6 +24,8 @@ if not DEBUG:
         )
 
     # Cabeceras de seguridad HTTP (solo en produccion con HTTPS)
+    # Railway/Heroku terminan TLS en el proxy — hay que confiar en X-Forwarded-Proto
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
     SECURE_SSL_REDIRECT = True
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
@@ -67,6 +69,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',   # justo después de Security
     'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -100,6 +103,9 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # BASE DE DATOS
 # DEBUG=True  → SQLite (sin instalacion extra, ideal para dev)
 # DEBUG=False → PostgreSQL (produccion)
+#   Railway inyecta DATABASE_URL automaticamente cuando agregas
+#   el plugin Postgres. Se parsea con dj-database-url.
+#   Como fallback, se usan las variables individuales DB_*.
 # ─────────────────────────────────────────────────────────────
 if DEBUG:
     DATABASES = {
@@ -109,16 +115,27 @@ if DEBUG:
         }
     }
 else:
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.postgresql',
-            'NAME': os.getenv('DB_NAME', 'barberia_db'),
-            'USER': os.getenv('DB_USER', 'postgres'),
-            'PASSWORD': os.getenv('DB_PASSWORD', 'password'),
-            'HOST': os.getenv('DB_HOST', 'localhost'),
-            'PORT': os.getenv('DB_PORT', '5432'),
+    import dj_database_url as _dj_db_url
+    _database_url = os.getenv('DATABASE_URL')
+    if _database_url:
+        DATABASES = {
+            'default': _dj_db_url.config(
+                default=_database_url,
+                conn_max_age=600,
+                ssl_require=True,
+            )
         }
-    }
+    else:
+        DATABASES = {
+            'default': {
+                'ENGINE': 'django.db.backends.postgresql',
+                'NAME': os.getenv('DB_NAME', 'barberia_db'),
+                'USER': os.getenv('DB_USER', 'postgres'),
+                'PASSWORD': os.getenv('DB_PASSWORD', 'password'),
+                'HOST': os.getenv('DB_HOST', 'localhost'),
+                'PORT': os.getenv('DB_PORT', '5432'),
+            }
+        }
 
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
@@ -136,6 +153,9 @@ STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+# WhiteNoise: compresion + cache busting para archivos estaticos en produccion
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
@@ -203,10 +223,15 @@ CORS_ALLOWED_ORIGINS = os.getenv(
 if DEBUG:
     EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 else:
-    EMAIL_BACKEND = 'anymail.backends.sendgrid.EmailBackend'
-    ANYMAIL = {
-        'SENDGRID_API_KEY': os.getenv('SENDGRID_API_KEY', ''),
-    }
+    # Para activar email en produccion instala django-anymail[sendgrid]
+    # y agrega SENDGRID_API_KEY en las variables de Railway.
+    # Por ahora se usa el backend de consola (los emails aparecen en los logs).
+    _sendgrid_key = os.getenv('SENDGRID_API_KEY', '')
+    if _sendgrid_key:
+        EMAIL_BACKEND = 'anymail.backends.sendgrid.EmailBackend'
+        ANYMAIL = {'SENDGRID_API_KEY': _sendgrid_key}
+    else:
+        EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'noreply@barbershopsystem.com')
 
