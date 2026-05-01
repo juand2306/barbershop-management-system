@@ -1,5 +1,6 @@
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from django.utils import timezone
 from .models import Product, ProductSale
@@ -48,22 +49,13 @@ class ProductViewSet(viewsets.ModelViewSet):
         Soft-delete: Marcar como inactive.
         Prevenir eliminación de productos con stock activo.
         """
-        from rest_framework.exceptions import ValidationError
-        
-        # Validar que el producto no tiene stock > 0
         if instance.current_quantity > 0:
             raise ValidationError({
                 "error": f"No se puede eliminar producto con stock activo ({instance.current_quantity} unidades). Agota el stock primero."
             })
-        
-        # Si no hay stock, marcar como inactivo
+
         instance.active = False
         instance.save()
-        
-        return Response(
-            {'status': 'Producto desactivado correctamente'},
-            status=status.HTTP_200_OK
-        )
 
     @action(detail=False, methods=['get'], url_path='stock-bajo')
     def stock_bajo(self, request):

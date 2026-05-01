@@ -4,19 +4,7 @@ import api from '../../api/axios';
 import Modal from '../../components/Modal';
 import { toast } from 'react-toastify';
 import { Package, Plus, Edit2, AlertTriangle } from 'lucide-react';
-
-const extractApiError = (err) => {
-  const data = err.response?.data;
-  if (!data) return 'Error de conexión';
-  if (typeof data === 'string') return data;
-  if (data.detail) return data.detail;
-  const firstKey = Object.keys(data)[0];
-  if (firstKey) {
-    const msg = data[firstKey];
-    return Array.isArray(msg) ? `${firstKey}: ${msg[0]}` : `${firstKey}: ${msg}`;
-  }
-  return 'Error desconocido';
-};
+import { extractApiError } from '../../utils/helpers';
 
 const emptyForm = { name: '', description: '', price: '', cost_price: 0, current_quantity: 0, minimum_quantity: 5, supplier: '', active: true };
 

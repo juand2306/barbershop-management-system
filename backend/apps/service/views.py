@@ -1,5 +1,4 @@
-from rest_framework import viewsets, permissions, status
-from rest_framework.response import Response
+from rest_framework import viewsets, permissions
 from .models import Service
 from .serializers import ServiceSerializer
 from apps.core.permissions import IsAdminOrManager
@@ -73,11 +72,6 @@ class ServiceViewSet(viewsets.ModelViewSet):
                 "error": "No se puede eliminar servicio con citas activas. Cancélalas primero."
             })
         
-        # Si no hay citas conflictivas, marcar como inactivo
+        # Si no hay citas conflictivas, marcar como inactivo (soft-delete)
         instance.active = False
         instance.save()
-        
-        return Response(
-            {'status': 'Servicio desactivado correctamente'},
-            status=status.HTTP_200_OK
-        )

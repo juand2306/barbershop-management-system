@@ -5,21 +5,7 @@ import Modal from '../../components/Modal';
 import BarberAvatar from '../../components/BarberAvatar';
 import { toast } from 'react-toastify';
 import { Users, Plus, CheckCircle, Clock, Edit2, UserX, UserCheck, Camera } from 'lucide-react';
-
-const extractApiError = (err) => {
-  const data = err.response?.data;
-  if (!data) return 'Error de conexión con el servidor';
-  if (typeof data === 'string') return data;
-  if (data.detail) return data.detail;
-  const firstKey = Object.keys(data)[0];
-  if (firstKey) {
-    const msg = data[firstKey];
-    return Array.isArray(msg) ? `${firstKey}: ${msg[0]}` : `${firstKey}: ${msg}`;
-  }
-  return 'Error desconocido';
-};
-
-const getLocalDateStr = () => new Intl.DateTimeFormat('en-CA').format(new Date());
+import { extractApiError, getLocalDateStr } from '../../utils/helpers';
 
 const emptyForm = { name: '', phone: '', document_id: '', specialty: '', commission_percentage: 50, active: true };
 

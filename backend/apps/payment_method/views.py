@@ -35,24 +35,26 @@ class PaymentMethodViewSet(viewsets.ModelViewSet):
     def perform_destroy(self, instance):
         """
         Prevenir eliminar métodos de pago que tienen transacciones asociadas.
-        Si hay transacciones: devolver error 400.
-        Si no hay transacciones: permitir eliminación.
+        Incluye pagos directos y splits de pagos mixtos.
         """
-        from apps.service_record.models import ServiceRecord
-        from apps.product.models import ProductSale
+        from apps.service_record.models import ServiceRecord, ServiceRecordPaymentSplit
+        from apps.product.models import ProductSale, ProductSalePaymentSplit
         from apps.expense.models import Expense
-        from apps.advance.models import Advance
-        
-        # Verificar si hay transacciones asociadas
-        has_service_records = ServiceRecord.objects.filter(payment_method=instance).exists()
-        has_product_sales = ProductSale.objects.filter(payment_method=instance).exists()
-        has_expenses = Expense.objects.filter(payment_method=instance).exists()
-        has_advances = Advance.objects.filter(payment_method=instance).exists()
-        
-        if has_service_records or has_product_sales or has_expenses or has_advances:
+        from apps.advance.models import Advance, AdvancePayment
+
+        has_transactions = (
+            ServiceRecord.objects.filter(payment_method=instance).exists()
+            or ServiceRecordPaymentSplit.objects.filter(payment_method=instance).exists()
+            or ProductSale.objects.filter(payment_method=instance).exists()
+            or ProductSalePaymentSplit.objects.filter(payment_method=instance).exists()
+            or Expense.objects.filter(payment_method=instance).exists()
+            or Advance.objects.filter(payment_method=instance).exists()
+            or AdvancePayment.objects.filter(payment_method=instance).exists()
+        )
+
+        if has_transactions:
             raise ValidationError(
                 "No se puede eliminar este método de pago porque tiene transacciones asociadas. Desactívalo en su lugar."
             )
-        
-        # Si no hay transacciones, eliminar
+
         instance.delete()

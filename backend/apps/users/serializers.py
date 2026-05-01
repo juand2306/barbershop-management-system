@@ -35,4 +35,9 @@ class UserCreateSerializer(serializers.ModelSerializer):
 
 class ChangePasswordSerializer(serializers.Serializer):
     old_password = serializers.CharField(required=True)
-    new_password = serializers.CharField(required=True)
+    new_password = serializers.CharField(required=True, min_length=8)
+
+    def validate_new_password(self, value):
+        if value == self.initial_data.get('old_password'):
+            raise serializers.ValidationError("La nueva contraseña no puede ser igual a la actual.")
+        return value

@@ -2,28 +2,37 @@ from rest_framework import permissions
 
 def assign_default_barbershop(user):
     """
-    Hook to ensure superusers without a Barbershop explicitly get one attached
-    so they can interact with the app without violating NOT NULL constraints.
+    Garantiza que el superusuario tenga una Barbershop asignada para no violar
+    restricciones NOT NULL. Solo se ejecuta cuando barbershop es None y no se
+    habia procesado antes en esta instancia del objeto user.
     """
-    if user and user.is_authenticated and user.is_superuser:
-        if not user.barbershop:
-            from apps.barbershop.models import Barbershop
-            import datetime
-            b = Barbershop.objects.first()
-            if not b:
-                b = Barbershop.objects.create(
-                    name="Synapsia Default",
-                    nit="900000000-1",
-                    address="Principal",
-                    phone="3000000000",
-                    email="admin@synapsia.local",
-                    opening_time=datetime.time(8, 0),
-                    closing_time=datetime.time(20, 0)
-                )
-            if b:
-                user.barbershop = b
-                user.role = 'admin'
-                user.save(update_fields=['barbershop', 'role'])
+    if not (user and user.is_authenticated and user.is_superuser):
+        return
+    if user.barbershop:
+        return
+    # Flag para evitar re-entradas dentro del mismo ciclo de request
+    if getattr(user, '_barbershop_assigned', False):
+        return
+
+    from apps.barbershop.models import Barbershop
+    import datetime
+
+    # get_or_create evita duplicados bajo condiciones de concurrencia
+    b, _ = Barbershop.objects.get_or_create(
+        nit="900000000-1",
+        defaults={
+            'name': "Barbería Principal",
+            'address': "Principal",
+            'phone': "3000000000",
+            'email': "admin@barberia.local",
+            'opening_time': datetime.time(8, 0),
+            'closing_time': datetime.time(20, 0),
+        }
+    )
+    user.barbershop = b
+    user.role = 'admin'
+    user.save(update_fields=['barbershop', 'role'])
+    user._barbershop_assigned = True
 
 
 class IsAdminOrManager(permissions.BasePermission):

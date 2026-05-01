@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
+import { useAuth } from './context/AuthContext';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
@@ -18,16 +19,13 @@ import Team from './pages/dashboard/Team';
 import Settings from './pages/dashboard/Settings';
 import HistoryPage from './pages/dashboard/History';
 import BarberStats from './pages/dashboard/BarberStats';
-const PlaceholderPage = ({ title }) => (
-  <div className="flex items-center justify-center h-full">
-    <div className="glass-panel p-10 text-center animate-slide-up">
-      <h2 className="text-2xl font-bold bg-gradient-to-r from-yellow-400 to-yellow-200 bg-clip-text text-transparent mb-2">
-        Módulo {title}
-      </h2>
-      <p className="text-gray-400">Esta sección está en desarrollo.</p>
-    </div>
-  </div>
-);
+const RoleGuard = ({ deny, children }) => {
+  const { user } = useAuth();
+  if (user && deny.includes(user.role_display)) {
+    return <Navigate to="/dashboard" replace />;
+  }
+  return children;
+};
 
 const App = () => {
   return (
@@ -50,7 +48,7 @@ const App = () => {
             <Route path="/team" element={<Team />} />
             <Route path="/history" element={<HistoryPage />} />
             <Route path="/barber-stats" element={<BarberStats />} />
-            <Route path="/settings" element={<Settings />} />
+            <Route path="/settings" element={<RoleGuard deny={['Barbero']}><Settings /></RoleGuard>} />
           </Route>
 
           {/* Fallback 404 */}

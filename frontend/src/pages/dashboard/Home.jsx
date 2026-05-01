@@ -7,9 +7,10 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell, Legend
 } from 'recharts';
 import {
-  Scissors, DollarSign, Clock, Users, TrendingUp,
-  AlertTriangle, Package, Calendar, CreditCard
+  Scissors, DollarSign, Users, TrendingUp,
+  AlertTriangle, Package, Calendar
 } from 'lucide-react';
+import { safeN } from '../../utils/helpers';
 import { format, subDays } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -61,8 +62,6 @@ const ChartTooltip = ({ active, payload, label }) => {
 // ─── PIE COLORS ───────────────────────────────────────────────────────────────
 const PIE_COLORS = ['#a855f7', '#06b6d4', '#f59e0b', '#10b981', '#ef4444'];
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-const safeN = (v) => { const n = Number(v); return isNaN(n) ? 0 : n; };
 
 // ─── MAIN DASHBOARD ───────────────────────────────────────────────────────────
 const HomeDashboard = () => {

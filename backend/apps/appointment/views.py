@@ -16,16 +16,16 @@ class AppointmentViewSet(viewsets.ModelViewSet):
     
     def get_permissions(self):
         """
-        Publico: Consultar disponibilidad y agendar (online booking).
-        Interno: Read para barberos, CRUD completo para Receptionist/Manager/Admin.
+        Publico: reservar_online (booking desde la landing page del cliente).
+        Interno: Read para cualquier autenticado, CRUD para Receptionist/Manager/Admin.
         """
-        if self.action in ['disponibilidad', 'reservar_online']:
+        if self.action in ['reservar_online']:
             permission_classes = [permissions.AllowAny]
         elif self.action in ['list', 'retrieve', 'calendario']:
             permission_classes = [permissions.IsAuthenticated]
         else:
             permission_classes = [IsReceptionistOrHigher]
-            
+
         return [permission() for permission in permission_classes]
 
     def get_queryset(self):

@@ -1,6 +1,7 @@
 from rest_framework import viewsets, permissions
 from .models import Expense
 from .serializers import ExpenseSerializer
+from apps.core.permissions import IsAdminOrManager
 
 
 class ExpenseViewSet(viewsets.ModelViewSet):
@@ -9,7 +10,17 @@ class ExpenseViewSet(viewsets.ModelViewSet):
     Filtrado por fecha y categoria.
     """
     serializer_class = ExpenseSerializer
-    permission_classes = [permissions.IsAuthenticated]
+
+    def get_permissions(self):
+        """
+        Lectura: cualquier usuario autenticado puede ver los gastos (necesario para el cierre).
+        Creacion / edicion / borrado: solo Admin o Manager.
+        """
+        if self.action in ['list', 'retrieve']:
+            permission_classes = [permissions.IsAuthenticated]
+        else:
+            permission_classes = [IsAdminOrManager]
+        return [permission() for permission in permission_classes]
 
     def get_queryset(self):
         qs = Expense.objects.select_related(

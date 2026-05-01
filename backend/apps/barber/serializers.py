@@ -1,6 +1,6 @@
+import datetime
 from rest_framework import serializers
 from .models import Barber, BarberDailyActive
-import datetime
 
 
 class BarberSerializer(serializers.ModelSerializer):
@@ -30,32 +30,27 @@ class BarberDailyActiveSerializer(serializers.ModelSerializer):
         """
         Si ya existe un registro para este barbero en esta fecha,
         reactivarlo en lugar de crear nuevo (upsert).
-        
-        Esto permite que el frontend pueda hacer POST múltiples veces
-        sin error de unique_together, y que el barbero pueda marcar
-        entrada, salida y volver a entrar el mismo día.
+
+        Permite POST múltiples veces sin error de unique_together y soporta
+        re-entradas del barbero en el mismo día.
         """
-        import datetime as dt
         barber = validated_data.get('barber')
-        work_date = validated_data.get('work_date', dt.date.today())
+        work_date = validated_data.get('work_date', datetime.date.today())
         barbershop = validated_data.get('barbershop')
-        
-        # Buscar si ya existe registro para este barbero en esta fecha
+
         existing = BarberDailyActive.objects.filter(
             barber=barber,
             work_date=work_date,
             barbershop=barbershop
         ).first()
-        
+
         if existing:
-            # Re-entrada: reactivar, resetear entry_time y limpiar exit_time
             existing.is_active = True
             existing.exit_time = None
-            existing.entry_time = validated_data.get('entry_time', dt.datetime.now().time())
+            existing.entry_time = validated_data.get('entry_time', datetime.datetime.now().time())
             existing.save(update_fields=['is_active', 'entry_time', 'exit_time'])
             return existing
-        
-        # Si no existe, crear normalmente
+
         return super().create(validated_data)
 
     def validate(self, data):

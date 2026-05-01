@@ -16,6 +16,7 @@ class Product(models.Model):
     description = models.TextField(blank=True, null=True)
     price = models.DecimalField(
         max_digits=10, decimal_places=2,
+        validators=[MinValueValidator(0)],
         verbose_name='Precio de venta'
     )
     cost_price = models.DecimalField(
@@ -24,7 +25,7 @@ class Product(models.Model):
         verbose_name='Precio de costo'
     )
 
-    current_quantity = models.IntegerField(default=0, verbose_name='Stock actual')
+    current_quantity = models.IntegerField(default=0, validators=[MinValueValidator(0)], verbose_name='Stock actual')
     minimum_quantity = models.IntegerField(
         default=5,
         verbose_name='Stock minimo',
@@ -103,7 +104,7 @@ class ProductSale(models.Model):
 
     # Permite editar la fecha si se registro despues de ocurrir el evento
     sale_date = models.DateField(
-        default=timezone.now,
+        default=timezone.localdate,
         verbose_name='Fecha de la venta',
         help_text='Fecha real de la venta'
     )
@@ -174,12 +175,14 @@ class ProductSalePaymentSplit(models.Model):
     amount = models.DecimalField(
         max_digits=10,
         decimal_places=2,
+        validators=[MinValueValidator(0.01)],
         verbose_name='Monto pagado con este método'
     )
 
     class Meta:
         verbose_name = 'División de Pago (Venta)'
         verbose_name_plural = 'Divisiones de Pago (Ventas)'
+        unique_together = ('product_sale', 'payment_method')
 
     def __str__(self):
         method_name = self.payment_method.name if self.payment_method else 'N/A'

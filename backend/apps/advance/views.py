@@ -1,3 +1,4 @@
+from decimal import Decimal
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -68,8 +69,8 @@ class AdvanceViewSet(viewsets.ModelViewSet):
             )
 
         try:
-            amount = float(amount)
-        except (TypeError, ValueError):
+            amount = Decimal(str(amount))
+        except Exception:
             return Response(
                 {'error': 'El monto debe ser un numero valido.'},
                 status=status.HTTP_400_BAD_REQUEST
@@ -81,7 +82,7 @@ class AdvanceViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        if amount > float(advance.amount_pending):
+        if amount > advance.amount_pending:
             return Response(
                 {'error': f'El monto excede el saldo pendiente (${advance.amount_pending:,.0f}).'},
                 status=status.HTTP_400_BAD_REQUEST

@@ -53,3 +53,10 @@ htmlcov/
 
 # Celery
 celerybeat-schedule
+
+# Claude Code
+.claude/worktrees/
+.claude/settings.local.json
+
+# Frontend build output
+frontend/dist/

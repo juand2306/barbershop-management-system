@@ -321,7 +321,6 @@ const CashRegister = () => {
       }));
     } catch (error) {
       toast.error('Error al obtener precio del producto');
-      console.error('Error fetching product price:', error);
     }
   };
 

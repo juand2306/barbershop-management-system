@@ -146,7 +146,7 @@ class AdvancePayment(models.Model):
 
     # Permite registrar pagos de dias anteriores si es necesario
     payment_date = models.DateField(
-        default=timezone.now,
+        default=timezone.localdate,
         verbose_name='Fecha del pago'
     )
 

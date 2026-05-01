@@ -10,6 +10,7 @@ import {
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import Modal from '../../components/Modal';
+import StatusBadge from '../../components/StatusBadge';
 
 // ─── WhatsApp URL builder ─────────────────────────────────────────────────────
 const buildWhatsAppUrl = (appointment, shopName) => {
@@ -24,23 +25,6 @@ const buildWhatsAppUrl = (appointment, shopName) => {
   const client   = appointment.client_name?.split(' ')[0] || 'Cliente';
   const msg = `Hola ${client} 👋, te recordamos que tienes una cita en *${shopName}* el *${dateStr}* a las *${timeStr}* con *${barber}* para *${svc}*.\n\n¿Confirmas tu asistencia? Si necesitas reagendar, contáctanos con tiempo. ¡Te esperamos! ✂️`;
   return `https://wa.me/${intlPhone}?text=${encodeURIComponent(msg)}`;
-};
-
-// ─── Status Badge ─────────────────────────────────────────────────────────────
-const StatusBadge = ({ status }) => {
-  const cfg = {
-    pendiente:  { label: 'Pendiente',  icon: Clock,         cls: 'text-yellow-400 bg-yellow-400/10 border-yellow-400/20' },
-    confirmada: { label: 'Confirmada', icon: CheckCircle,   cls: 'text-cyan-400   bg-cyan-400/10   border-cyan-400/20'   },
-    completada: { label: 'Completada', icon: Check,         cls: 'text-emerald-400 bg-emerald-400/10 border-emerald-400/20' },
-    no_asistio: { label: 'No asistió', icon: XCircle,       cls: 'text-red-400   bg-red-400/10   border-red-400/20'    },
-    cancelada:  { label: 'Cancelada',  icon: Ban,           cls: 'text-gray-500  bg-gray-500/10  border-gray-500/20'   },
-  }[status] || { label: status, icon: AlertCircle, cls: 'text-gray-400 bg-white/5 border-white/10' };
-  const Icon = cfg.icon;
-  return (
-    <span className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs border font-bold ${cfg.cls}`}>
-      <Icon className="w-3 h-3" /> {cfg.label.toUpperCase()}
-    </span>
-  );
 };
 
 // ─── MAIN ─────────────────────────────────────────────────────────────────────

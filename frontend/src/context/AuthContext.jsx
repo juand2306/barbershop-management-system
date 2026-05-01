@@ -43,20 +43,28 @@ export const AuthProvider = ({ children }) => {
       const userRes = await api.get('/users/me/');
       setUser(userRes.data);
       
-      toast.success(`Welcome back!`);
+      toast.success(`Bienvenido de vuelta, ${userRes.data.first_name || userRes.data.username}!`);
       return true;
     } catch (error) {
-       toast.error(error.response?.data?.detail || "Invalid credentials. Try again.");
+       toast.error(error.response?.data?.detail || 'Credenciales incorrectas. Inténtalo de nuevo.');
        return false;
     }
   };
 
-  const logout = () => {
+  const logout = async () => {
+    const refresh = localStorage.getItem('refresh_token');
+    if (refresh) {
+      try {
+        await api.post('/auth/token/blacklist/', { refresh });
+      } catch {
+        // blacklist may fail if token already expired — proceed regardless
+      }
+    }
     localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
     delete api.defaults.headers.common['Authorization'];
     setUser(null);
-    toast.info("Logged out successfully");
+    toast.info('Sesión cerrada');
   };
 
   const value = {

@@ -3,18 +3,16 @@ import { useQuery } from '@tanstack/react-query';
 import api from '../../api/axios';
 import {
   History, Filter, Scissors, DollarSign, TrendingDown,
-  CreditCard, Package, Calendar, ChevronDown, ChevronUp,
-  Search, Download, RefreshCw, ArrowUpRight, ArrowDownRight,
+  CreditCard, Package, ChevronDown, ChevronUp,
+  Search, ArrowUpRight, ArrowDownRight,
   FileText, User, Clock, BarChart2, X
 } from 'lucide-react';
+import { fmt } from '../../utils/helpers';
+import StatusBadge from '../../components/StatusBadge';
 import { format, parseISO, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-const fmt = (val) => {
-  if (!val && val !== 0) return '$0';
-  return `$${Number(val).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
-};
 const fmtDate = (str) => {
   if (!str) return '—';
   try { return format(parseISO(str), "d MMM yyyy", { locale: es }); } catch { return str; }
@@ -60,32 +58,6 @@ const TAB_COLORS = {
   red:    { active: 'border-red-400 text-red-400',         badge: 'bg-red-500/20 text-red-300 border-red-500/30',         summary: 'from-red-900/20 to-transparent border-red-500/20'     },
   yellow: { active: 'border-yellow-400 text-yellow-400',   badge: 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30', summary: 'from-yellow-900/20 to-transparent border-yellow-500/20'},
   green:  { active: 'border-green-400 text-green-400',     badge: 'bg-green-500/20 text-green-300 border-green-500/30',   summary: 'from-green-900/20 to-transparent border-green-500/20' },
-};
-
-// ─── Status badges ───────────────────────────────────────────────────────────
-const StatusChip = ({ status }) => {
-  const map = {
-    completado: 'text-emerald-400 bg-emerald-400/10 border-emerald-400/20',
-    completada: 'text-emerald-400 bg-emerald-400/10 border-emerald-400/20',
-    confirmado: 'text-emerald-400 bg-emerald-400/10 border-emerald-400/20',
-    cancelado:  'text-gray-500 bg-gray-500/10 border-gray-500/20',
-    borrador:   'text-yellow-400 bg-yellow-400/10 border-yellow-400/20',
-    guardado:   'text-cyan-400 bg-cyan-400/10 border-cyan-400/20',
-    pendiente:  'text-yellow-400 bg-yellow-400/10 border-yellow-400/20',
-    parcialmente_pagado: 'text-orange-400 bg-orange-400/10 border-orange-400/20',
-    pagado:     'text-emerald-400 bg-emerald-400/10 border-emerald-400/20',
-  };
-  const cls = map[status] || 'text-gray-400 bg-gray-400/10 border-gray-400/20';
-  const labels = {
-    completado: 'Completado', completada: 'Completada', confirmado: 'Confirmado',
-    cancelado: 'Cancelado', borrador: 'Borrador', guardado: 'Guardado',
-    pendiente: 'Pendiente', parcialmente_pagado: 'Parcial', pagado: 'Pagado',
-  };
-  return (
-    <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${cls}`}>
-      {labels[status] || status}
-    </span>
-  );
 };
 
 // ─── Filter Bar component ────────────────────────────────────────────────────
@@ -321,7 +293,7 @@ const CierresTab = ({ filters, onFilterChange, barbers, paymentMethods }) => {
                 <div className="font-bold text-white">{fmtDate(r.report_date)}</div>
                 {r.notes && <div className="text-[11px] text-gray-500 mt-0.5 max-w-[180px] truncate">{r.notes}</div>}
               </Td>
-              <Td><StatusChip status={r.status} /></Td>
+              <Td><StatusBadge status={r.status} /></Td>
               <Td right mono>{fmt(r.total_services_amount)}</Td>
               <Td right mono>{fmt(r.total_products_amount)}</Td>
               <Td right mono>{fmt(r.total_advance_payments)}</Td>
@@ -409,7 +381,7 @@ const ServiciosTab = ({ filters, onFilterChange, barbers, paymentMethods }) => {
               <Td>{r.service_name}</Td>
               <Td>{r.barber_name}</Td>
               <Td>{r.payment_method_name || '—'}</Td>
-              <Td><StatusChip status={r.status} /></Td>
+              <Td><StatusBadge status={r.status} /></Td>
               <Td right><span className="font-black font-mono text-cyan-400">{fmt(r.price_charged)}</span></Td>
             </tr>
           ))}
@@ -576,7 +548,7 @@ const ValesTab = ({ filters, onFilterChange, barbers, paymentMethods }) => {
               <Td><span className="font-bold text-white">{r.barber_name}</span></Td>
               <Td><span className="max-w-[180px] truncate block text-gray-400">{r.detail || '—'}</span></Td>
               <Td muted>{r.payment_method_name || '—'}</Td>
-              <Td><StatusChip status={r.status} /></Td>
+              <Td><StatusBadge status={r.status} /></Td>
               <Td right><span className="font-black font-mono text-yellow-400">{fmt(r.amount)}</span></Td>
               <Td right><span className="font-mono text-emerald-400">{fmt(r.amount_paid)}</span></Td>
               <Td right>

@@ -8,15 +8,14 @@ import {
   Cell, Legend
 } from 'recharts';
 import {
-  TrendingUp, Award, Scissors, DollarSign, Star,
+  TrendingUp, Award, Scissors, DollarSign,
   Users, Calendar, ChevronDown
 } from 'lucide-react';
+import { fmt, safeN } from '../../utils/helpers';
 import { format, subDays, startOfMonth, endOfMonth, startOfWeek, endOfWeek } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-const fmt = (v) => `$${Number(v || 0).toLocaleString('es-CO', { minimumFractionDigits: 0 })}`;
-const safeN = (v) => { const n = Number(v); return isNaN(n) ? 0 : n; };
 
 const BARBER_COLORS = [
   '#a855f7', '#06b6d4', '#f59e0b', '#10b981', '#ef4444',

@@ -4,8 +4,10 @@ import api from '../../api/axios';
 import { toast } from 'react-toastify';
 import {
   Calendar, ChevronLeft, ChevronRight, Plus, X, Clock,
-  User, Scissors, Phone, Mail, Check, AlertCircle, Wifi, WifiOff
+  User, Scissors, Phone, Mail, Check, AlertCircle, Wifi, WifiOff,
+  CheckCircle, XCircle, Ban
 } from 'lucide-react';
+import StatusBadge from '../../components/StatusBadge';
 import { format, parseISO, addDays, subDays, startOfDay, isSameDay } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -138,9 +140,10 @@ const EventBlock = ({ event, onClick }) => {
   );
 };
 
-const EventDetailModal = ({ event, onClose, onNewAppointment }) => {
+const EventDetailModal = ({ event, onClose, onStatusChange }) => {
   if (!event) return null;
   const styles = EVENT_STYLES[event.type] || EVENT_STYLES.cita;
+  const isActive = event.type === 'cita' && (event.status === 'pendiente' || event.status === 'confirmada');
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={onClose}>
@@ -188,17 +191,44 @@ const EventDetailModal = ({ event, onClose, onNewAppointment }) => {
           )}
 
           {event.type === 'cita' && (
-            <div className="flex items-center gap-2">
-              {event.is_online_booking ? (
-                <span className="flex items-center gap-1.5 text-xs text-cyan-400 bg-cyan-400/10 border border-cyan-400/20 px-2 py-1 rounded">
-                  <Wifi className="w-3 h-3" /> Reserva Online
-                </span>
-              ) : (
-                <span className="flex items-center gap-1.5 text-xs text-purple-400 bg-purple-400/10 border border-purple-400/20 px-2 py-1 rounded">
-                  <WifiOff className="w-3 h-3" /> Agendado internamente
-                </span>
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 flex-wrap">
+                {event.is_online_booking ? (
+                  <span className="flex items-center gap-1.5 text-xs text-cyan-400 bg-cyan-400/10 border border-cyan-400/20 px-2 py-1 rounded">
+                    <Wifi className="w-3 h-3" /> Reserva Online
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1.5 text-xs text-purple-400 bg-purple-400/10 border border-purple-400/20 px-2 py-1 rounded">
+                    <WifiOff className="w-3 h-3" /> Agendado internamente
+                  </span>
+                )}
+                <StatusBadge status={event.status} />
+              </div>
+
+              {isActive && onStatusChange && (
+                <div className="flex gap-2 flex-wrap pt-1 border-t border-white/[0.06]">
+                  {event.status === 'pendiente' && (
+                    <button
+                      onClick={() => { onStatusChange(event.source_id, 'confirmada'); onClose(); }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-cyan-500/30 bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 text-xs font-black uppercase tracking-wider transition-colors"
+                    >
+                      <CheckCircle className="w-3.5 h-3.5" /> Confirmar
+                    </button>
+                  )}
+                  <button
+                    onClick={() => { onStatusChange(event.source_id, 'no_asistio'); onClose(); }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20 text-xs font-black uppercase tracking-wider transition-colors"
+                  >
+                    <XCircle className="w-3.5 h-3.5" /> No asistió
+                  </button>
+                  <button
+                    onClick={() => { onStatusChange(event.source_id, 'cancelada'); onClose(); }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-500/30 bg-gray-500/10 text-gray-400 hover:bg-gray-500/20 text-xs font-black uppercase tracking-wider transition-colors"
+                  >
+                    <Ban className="w-3.5 h-3.5" /> Cancelar
+                  </button>
+                </div>
               )}
-              <StatusBadge status={event.status} />
             </div>
           )}
         </div>
@@ -216,21 +246,6 @@ const InfoRow = ({ icon, label, value }) => (
   </div>
 );
 
-const StatusBadge = ({ status }) => {
-  const map = {
-    confirmada: { color: 'text-cyan-400', bg: 'bg-cyan-400/10 border-cyan-400/20', label: 'Confirmada' },
-    pendiente: { color: 'text-yellow-400', bg: 'bg-yellow-400/10 border-yellow-400/20', label: 'Pendiente' },
-    completada: { color: 'text-emerald-400', bg: 'bg-emerald-400/10 border-emerald-400/20', label: 'Completada' },
-    completado: { color: 'text-emerald-400', bg: 'bg-emerald-400/10 border-emerald-400/20', label: 'Completado' },
-  };
-  const s = map[status] || { color: 'text-gray-400', bg: 'bg-gray-400/10 border-gray-400/20', label: status };
-  return (
-    <span className={`text-xs ${s.color} ${s.bg} border px-2 py-1 rounded font-bold uppercase tracking-wide`}>
-      {s.label}
-    </span>
-  );
-};
-
 // ─── New Appointment Modal ────────────────────────────────────────────────────
 const NewAppointmentModal = ({ selectedSlot, barbers, services, onClose, onSuccess }) => {
   const [form, setForm] = useState({
@@ -243,8 +258,6 @@ const NewAppointmentModal = ({ selectedSlot, barbers, services, onClose, onSucce
     notes: '',
     status: 'confirmada',
   });
-  const [loading, setLoading] = useState(false);
-
   // When service changes, auto-suggest end time (just for display)
   const selectedService = services?.find(s => String(s.id) === String(form.service));
   const endTimeDisplay = useMemo(() => {
@@ -258,30 +271,32 @@ const NewAppointmentModal = ({ selectedSlot, barbers, services, onClose, onSucce
 
   const handleChange = (field, value) => setForm(prev => ({ ...prev, [field]: value }));
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!form.barber || !form.service || !form.client_name || !form.client_phone || !form.appointment_datetime) {
-      toast.error('Completa todos los campos requeridos');
-      return;
-    }
-    setLoading(true);
-    try {
-      await api.post('/appointments/', {
-        ...form,
-        barber: parseInt(form.barber),
-        service: parseInt(form.service),
-      });
+  const createAppointment = useMutation({
+    mutationFn: (data) => api.post('/appointments/', data),
+    onSuccess: () => {
       toast.success('✅ Cita agendada correctamente');
       onSuccess();
-    } catch (err) {
+    },
+    onError: (err) => {
       const msg = err.response?.data?.appointment_datetime?.[0]
         || err.response?.data?.detail
         || err.response?.data?.non_field_errors?.[0]
         || 'Error al agendar la cita';
       toast.error(msg);
-    } finally {
-      setLoading(false);
+    },
+  });
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!form.barber || !form.service || !form.client_name || !form.client_phone || !form.appointment_datetime) {
+      toast.error('Completa todos los campos requeridos');
+      return;
     }
+    createAppointment.mutate({
+      ...form,
+      barber: parseInt(form.barber),
+      service: parseInt(form.service),
+    });
   };
 
   return (
@@ -448,11 +463,11 @@ const NewAppointmentModal = ({ selectedSlot, barbers, services, onClose, onSucce
             </button>
             <button
               type="submit"
-              disabled={loading}
+              disabled={createAppointment.isLoading}
               className="flex-1 btn btn-primary py-3 text-sm uppercase tracking-wider font-black"
               style={{ borderRadius: '4px' }}
             >
-              {loading ? (
+              {createAppointment.isLoading ? (
                 <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
               ) : (
                 <><Check className="w-4 h-4" /> Agendar Cita</>
@@ -472,6 +487,15 @@ const CalendarPage = () => {
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [showNewModal, setShowNewModal] = useState(false);
   const [newSlot, setNewSlot] = useState(null);
+
+  const changeStatus = useMutation({
+    mutationFn: ({ id, status }) => api.patch(`/appointments/${id}/estado/`, { status }),
+    onSuccess: (_, { id, status }) => {
+      toast.success(`Estado actualizado: ${status}`);
+      queryClient.invalidateQueries(['calendar']);
+    },
+    onError: () => toast.error('Error al actualizar el estado'),
+  });
   const gridRef = useRef(null);
 
   const dateStr = format(currentDate, 'yyyy-MM-dd');
@@ -791,7 +815,7 @@ const CalendarPage = () => {
         <EventDetailModal
           event={selectedEvent}
           onClose={() => setSelectedEvent(null)}
-          onNewAppointment={() => { setSelectedEvent(null); setShowNewModal(true); }}
+          onStatusChange={(id, status) => changeStatus.mutate({ id, status })}
         />
       )}
 

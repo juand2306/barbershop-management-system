@@ -29,6 +29,7 @@ class Barbershop(models.Model):
     class Meta:
         verbose_name = "Barbería"
         verbose_name_plural = "Barberías"
+        ordering = ['name']
     
     def __str__(self):
         return self.name

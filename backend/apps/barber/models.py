@@ -1,4 +1,5 @@
 from django.db import models
+from django.db.models import Q, UniqueConstraint
 from django.core.validators import MinValueValidator, MaxValueValidator
 
 class Barber(models.Model):
@@ -30,7 +31,15 @@ class Barber(models.Model):
     class Meta:
         verbose_name = "Barbero"
         verbose_name_plural = "Barberos"
-        unique_together = ('barbershop', 'document_id')
+        constraints = [
+            # Solo aplica unicidad cuando document_id tiene valor;
+            # permite multiples barberos sin cedula en la misma barberia.
+            UniqueConstraint(
+                fields=['barbershop', 'document_id'],
+                condition=Q(document_id__gt=''),
+                name='unique_barber_document_per_barbershop'
+            )
+        ]
     
     def __str__(self):
         return f"{self.name} - {self.barbershop.name}"

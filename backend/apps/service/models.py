@@ -1,4 +1,5 @@
 from django.db import models
+from django.core.validators import MinValueValidator
 
 class Service(models.Model):
     """Servicio ofrecido por la barbería."""
@@ -18,7 +19,7 @@ class Service(models.Model):
     
     name = models.CharField(max_length=200)
     description = models.TextField(blank=True, null=True)
-    price = models.DecimalField(max_digits=10, decimal_places=2)
+    price = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)])
     duration_minutes = models.IntegerField()
     category = models.CharField(
         max_length=20,

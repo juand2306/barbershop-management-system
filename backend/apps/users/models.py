@@ -41,6 +41,12 @@ class User(AbstractUser):
         verbose_name = 'Usuario'
         verbose_name_plural = 'Usuarios'
 
+    def save(self, *args, **kwargs):
+        # Sincronizar is_active (campo de Django que controla autenticacion JWT)
+        # con el campo active que usa la UI de administracion.
+        self.is_active = self.active
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return f"{self.get_full_name() or self.username} [{self.role}]"
 

@@ -117,12 +117,14 @@ class ServiceRecordPaymentSplit(models.Model):
     amount = models.DecimalField(
         max_digits=10,
         decimal_places=2,
+        validators=[MinValueValidator(0.01)],
         verbose_name='Monto pagado con este método'
     )
 
     class Meta:
         verbose_name = 'División de Pago (Servicio)'
         verbose_name_plural = 'Divisiones de Pago (Servicios)'
+        unique_together = ('service_record', 'payment_method')
 
     def __str__(self):
         method_name = self.payment_method.name if self.payment_method else 'N/A'

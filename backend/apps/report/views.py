@@ -1,9 +1,8 @@
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from django.db import transaction
+from django.db import transaction, models
 from django.db.models import Sum, F, ExpressionWrapper, DecimalField
-from django.db import models
 
 from .models import DailyReport, DailyReportPaymentBreakdown, BarberDailyCommission
 from .serializers import DailyReportSerializer
@@ -28,15 +27,7 @@ class DailyReportViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_permissions(self):
-        """
-        Todos pueden ver los reportes (o podriamos restringir a solo Admins/Managers).
-        Por ahora, Admins/Managers manejan cierres completos.
-        """
-        if self.action in ['list', 'retrieve', 'generar_cierre', 'confirmar']:
-             permission_classes = [IsAdminOrManager]
-        else:
-             permission_classes = [IsAdminOrManager]
-        return [permission() for permission in permission_classes]
+        return [IsAdminOrManager()]
 
     def get_queryset(self):
         qs = DailyReport.objects.prefetch_related(
@@ -133,29 +124,36 @@ class DailyReportViewSet(viewsets.ModelViewSet):
             # Las comisiones son solo sobre los ServiceRecords
             barber_commissions_list = []
             total_commissions = 0
-            
-            # Agrupar servicios por barbero
-            active_barbers = Barber.objects.filter(
-                barbershop=barbershop, active=True
-            ).prefetch_related('advances')
+
+            active_barbers = Barber.objects.filter(barbershop=barbershop, active=True)
+
+            # Pre-agregar totales de servicios por barbero en una sola query (evita N+1)
+            services_by_barber = {
+                row['barber_id']: row['total']
+                for row in services.values('barber_id').annotate(total=Sum('price_charged'))
+            }
+
+            # Pre-agregar vales pendientes por barbero en una sola query (evita N+1)
+            pending_advances_by_barber = {
+                row['barber_id']: row['pending'] or 0
+                for row in Advance.objects.filter(
+                    barbershop=barbershop
+                ).exclude(status='pagado').values('barber_id').annotate(
+                    pending=Sum(
+                        ExpressionWrapper(
+                            F('amount') - F('amount_paid'),
+                            output_field=DecimalField(max_digits=12, decimal_places=2)
+                        )
+                    )
+                )
+            }
 
             for barber in active_barbers:
-                barber_services = services.filter(barber=barber)
-                s_total = barber_services.aggregate(Sum('price_charged'))['price_charged__sum'] or 0
-                
+                s_total = services_by_barber.get(barber.id, 0) or 0
+
                 if s_total > 0:
                      c_amount = s_total * (barber.commission_percentage / 100)
-                     
-                     # Calculo informativo de vales pendientes (amount - amount_paid, calculado en ORM)
-                     from django.db.models import ExpressionWrapper as EW, DecimalField as DF
-                     p_advances = barber.advances.exclude(status='pagado').aggregate(
-                         pending=Sum(
-                             EW(
-                                 models.F('amount') - models.F('amount_paid'),
-                                 output_field=DF(max_digits=12, decimal_places=2)
-                             )
-                         )
-                     )['pending'] or 0
+                     p_advances = pending_advances_by_barber.get(barber.id, 0)
 
                      barber_commissions_list.append(BarberDailyCommission(
                           barbershop=barbershop,

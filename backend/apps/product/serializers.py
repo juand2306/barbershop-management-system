@@ -65,7 +65,8 @@ class ProductSaleSerializer(serializers.ModelSerializer):
 
     def validate(self, data):
         """
-        Validación de pago:
+        Validación de pago y stock:
+        - Verifica que haya stock suficiente para la cantidad solicitada.
         - Si se envían payment_splits → pago mixto: suma debe coincidir con total_price calculado.
         - Si no hay splits → payment_method es obligatorio.
         """
@@ -76,6 +77,17 @@ class ProductSaleSerializer(serializers.ModelSerializer):
         unit_price = data.get('unit_price', Decimal('0'))
         discount = data.get('discount_amount', Decimal('0'))
         total_price = max(Decimal('0'), (quantity * unit_price) - discount)
+
+        # Validación de stock disponible
+        product = data.get('product')
+        if product is not None and quantity is not None:
+            if quantity > product.current_quantity:
+                raise serializers.ValidationError({
+                    "quantity": (
+                        f"Stock insuficiente. Tienes {product.current_quantity} "
+                        f"unidad(es) disponible(s) de '{product.name}'."
+                    )
+                })
 
         if splits:
             if payment_method:

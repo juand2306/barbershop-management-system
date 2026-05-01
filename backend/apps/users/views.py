@@ -1,5 +1,6 @@
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from django.contrib.auth import get_user_model
 from django.contrib.auth.hashers import check_password
@@ -50,24 +51,22 @@ class UserViewSet(viewsets.ModelViewSet):
         """
         role = serializer.validated_data.get('role', 'receptionist')
         requester_role = getattr(self.request.user, 'role', None)
-        
-        # Non-admins cannot create admin accounts — downgrade silently to manager
+
         if role == 'admin' and requester_role != 'admin' and not self.request.user.is_superuser:
-            serializer.validated_data['role'] = 'manager'
+            raise PermissionDenied("Solo un administrador puede crear cuentas con rol 'admin'.")
 
         serializer.save(barbershop=self.request.user.barbershop)
 
     def perform_update(self, serializer):
         """
-        Protección en update: no-admins no pueden escalar su propio rol a 'admin'.
+        Protección en update: no-admins no pueden escalar un rol a 'admin'.
         """
         requested_role = serializer.validated_data.get('role')
         requester_role = getattr(self.request.user, 'role', None)
-        
+
         if requested_role == 'admin' and requester_role != 'admin' and not self.request.user.is_superuser:
-            # Non-admin trying to set admin role → downgrade to manager
-            serializer.validated_data['role'] = 'manager'
-            
+            raise PermissionDenied("Solo un administrador puede asignar el rol 'admin'.")
+
         serializer.save()
 
 

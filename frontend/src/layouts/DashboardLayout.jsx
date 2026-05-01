@@ -92,6 +92,21 @@ const DashboardLayout = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const p = location.pathname;
+
+  const PAGE_TITLES = {
+    '/dashboard':    'Dashboard',
+    '/cash':         'Caja Diaria',
+    '/calendar':     'Calendario',
+    '/appointments': 'Citas',
+    '/history':      'Histórico',
+    '/barber-stats': 'Rendimiento',
+    '/services':     'Servicios',
+    '/products':     'Inventario',
+    '/team':         'Equipo',
+    '/settings':     'Configuración',
+  };
+  const pageTitle = PAGE_TITLES[p] || 'Panel de Control';
+
   const displayName = user?.first_name
     ? `${user.first_name}${user.last_name ? ' ' + user.last_name : ''}`
     : user?.username || 'Usuario';
@@ -199,7 +214,7 @@ const DashboardLayout = () => {
               <Menu className="w-5 h-5" />
             </button>
             <div>
-              <h2 className="text-sm font-bold text-gray-300 uppercase tracking-widest leading-none">Panel de Control</h2>
+              <h2 className="text-sm font-bold text-gray-300 uppercase tracking-widest leading-none">{pageTitle}</h2>
               <p className="text-xs text-gray-600 mt-0.5">
                 Bienvenido, <span className="text-purple-400 font-bold">{displayName}</span>
               </p>

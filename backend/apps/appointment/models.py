@@ -47,6 +47,7 @@ class Appointment(models.Model):
     class Meta:
         verbose_name = "Cita"
         verbose_name_plural = "Citas"
+        ordering = ['-appointment_datetime']
         indexes = [
             models.Index(fields=['barbershop', 'appointment_datetime']),
             models.Index(fields=['barber', 'appointment_datetime']),

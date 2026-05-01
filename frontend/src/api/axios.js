@@ -1,6 +1,5 @@
 import axios from 'axios';
 
-// La URL base asume que el backend Django estara corriendo local en :8000
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 
 const api = axios.create({
@@ -10,7 +9,6 @@ const api = axios.create({
   },
 });
 
-// Interceptor para inyectar token
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('access_token');
   if (token) {
@@ -26,7 +24,7 @@ api.interceptors.response.use(
   (error) => {
     if (error.response && error.response.data) {
       // Si DRF manda un diccionario de validaciones (ej. {"name": ["Obligatorio"]})
-      // lo mapeamos a 'detail' para que el toast general lo muestre.
+      // lo mapeamos a 'detail' para que extractApiError lo muestre correctamente.
       if (!error.response.data.detail && typeof error.response.data === 'object' && !Array.isArray(error.response.data)) {
         const firstKey = Object.keys(error.response.data)[0];
         if (firstKey) {
@@ -35,6 +33,15 @@ api.interceptors.response.use(
         }
       }
     }
+
+    // Token expirado a mitad de sesión: limpiar storage y redirigir a login
+    if (error.response?.status === 401) {
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('refresh_token');
+      delete api.defaults.headers.common['Authorization'];
+      window.location.href = '/login';
+    }
+
     return Promise.reject(error);
   }
 );

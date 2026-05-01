@@ -4,19 +4,7 @@ import api from '../../api/axios';
 import Modal from '../../components/Modal';
 import { toast } from 'react-toastify';
 import { Scissors, Plus, Edit2 } from 'lucide-react';
-
-const extractApiError = (err) => {
-  const data = err.response?.data;
-  if (!data) return 'Error de conexión';
-  if (typeof data === 'string') return data;
-  if (data.detail) return data.detail;
-  const firstKey = Object.keys(data)[0];
-  if (firstKey) {
-    const msg = data[firstKey];
-    return Array.isArray(msg) ? `${firstKey}: ${msg[0]}` : `${firstKey}: ${msg}`;
-  }
-  return 'Error desconocido';
-};
+import { extractApiError } from '../../utils/helpers';
 
 // Backend categories — must match Service.CATEGORY_CHOICES exactly
 const CATEGORIES = [

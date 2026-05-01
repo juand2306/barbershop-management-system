@@ -18,18 +18,9 @@ class ServiceRecordViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        # Un barbero normal podria querer ver su propio historial:
-        if self.request.user.role == 'barber':
-             # Hay que buscar el modelo Barber vinculado. 
-             # Suponiendo que el User model tiene relacion al Barber o se usa filtrado comun.
-             # Por seguridad base de Single Tenant, los filtros del cliente haran su trabajo 'barber_id='
-             qs = ServiceRecord.objects.select_related('barber', 'service', 'payment_method', 'appointment').filter(
-                 barbershop=self.request.user.barbershop
-             )
-        else:
-             qs = ServiceRecord.objects.select_related('barber', 'service', 'payment_method', 'appointment').filter(
-                 barbershop=self.request.user.barbershop
-             )
+        qs = ServiceRecord.objects.select_related(
+            'barber', 'service', 'payment_method', 'appointment'
+        ).filter(barbershop=self.request.user.barbershop)
         
         # Filtros
         date = self.request.query_params.get('date')          # YYYY-MM-DD

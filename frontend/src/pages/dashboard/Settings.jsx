@@ -355,7 +355,7 @@ const Settings = () => {
                  Registrar Staff
                </h2>
                <form onSubmit={handleAddUser} className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                      <div className="space-y-1">
                         <label className="text-xs uppercase font-bold text-gray-400">Nombres</label>
                         <input required className="input-glass" value={newUser.first_name} onChange={e => setNewUser({...newUser, first_name: e.target.value})} />
@@ -371,7 +371,7 @@ const Settings = () => {
                      <input type="email" required className="input-glass" value={newUser.email} onChange={e => setNewUser({...newUser, email: e.target.value})} />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                      <div className="space-y-1">
                         <label className="text-xs uppercase font-bold text-gray-400">Usuario (Login)</label>
                         <input required className="input-glass" value={newUser.username} onChange={e => setNewUser({...newUser, username: e.target.value.toLowerCase()})} />
@@ -390,7 +390,7 @@ const Settings = () => {
                      <select className="input-glass bg-[#151518]" value={newUser.role} onChange={e => setNewUser({...newUser, role: e.target.value})}>
                         <option value="receptionist">Recepcionista (Solo Agendar y Turnos)</option>
                         <option value="manager">Gerencia (Caja, Reportes y Equipo)</option>
-                        <option value="admin">Administrador (Acceso Total)</option>
+                        <option value="admin">Administrador (Acceso Total)</option>
                      </select>
                   </div>
 
@@ -464,7 +464,7 @@ const Settings = () => {
                     <input className="input-glass" value={shopForm.name} onChange={e => setShopForm(f => ({ ...f, name: e.target.value }))} /></div>
                   <div className="space-y-1"><label className="text-[10px] uppercase font-black text-gray-500 tracking-widest">Descripcion / Slogan</label>
                     <textarea rows={2} className="input-glass resize-none" value={shopForm.description} onChange={e => setShopForm(f => ({ ...f, description: e.target.value }))} /></div>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="space-y-1"><label className="text-[10px] uppercase font-black text-gray-500 tracking-widest">Telefono</label>
                       <input className="input-glass" value={shopForm.phone} onChange={e => setShopForm(f => ({ ...f, phone: e.target.value }))} /></div>
                     <div className="space-y-1"><label className="text-[10px] uppercase font-black text-gray-500 tracking-widest">Correo</label>
@@ -472,7 +472,7 @@ const Settings = () => {
                   </div>
                   <div className="space-y-1"><label className="text-[10px] uppercase font-black text-gray-500 tracking-widest">Direccion</label>
                     <input className="input-glass" value={shopForm.address} onChange={e => setShopForm(f => ({ ...f, address: e.target.value }))} /></div>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="space-y-1"><label className="text-[10px] uppercase font-black text-gray-500 tracking-widest">Apertura</label>
                       <input type="time" className="input-glass" value={shopForm.opening_time} onChange={e => setShopForm(f => ({ ...f, opening_time: e.target.value }))} /></div>
                     <div className="space-y-1"><label className="text-[10px] uppercase font-black text-gray-500 tracking-widest">Cierre</label>
