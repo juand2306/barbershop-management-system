@@ -67,11 +67,22 @@ export const AuthProvider = ({ children }) => {
     toast.info('Sesión cerrada');
   };
 
+  // Refresca el objeto user desde el servidor (útil tras cambios de logo/perfil)
+  const refreshUser = async () => {
+    try {
+      const response = await api.get('/users/me/');
+      setUser(response.data);
+    } catch {
+      // silent — si falla, el user anterior sigue siendo válido
+    }
+  };
+
   const value = {
     user,
     loading,
     login,
     logout,
+    refreshUser,
     isAuthenticated: !!user,
   };
 

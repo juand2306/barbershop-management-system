@@ -70,19 +70,29 @@ const SidebarContent = ({ collapsed, user, logout, p, onLinkClick }) => (
 );
 
 // ─── Brand header ─────────────────────────────────────────────────────────────
-const BrandHeader = ({ collapsed, user }) => (
-  <div className={`flex items-center gap-2.5 px-3 py-4 border-b border-white/[0.06] flex-shrink-0 ${collapsed ? 'justify-center' : ''}`}>
-    <div className="w-7 h-7 bg-purple-500 rounded-lg flex items-center justify-center flex-shrink-0 shadow-[0_0_16px_rgba(168,85,247,0.4)]">
-      <Scissors className="w-3.5 h-3.5 text-white" />
+const BrandHeader = ({ collapsed, user }) => {
+  const logo = user?.barbershop_logo_url;
+  return (
+    <div className="flex flex-col items-center justify-center gap-1.5 px-3 py-3 border-b border-white/[0.06] flex-shrink-0">
+      {logo ? (
+        <img
+          src={logo}
+          alt={user?.barbershop_name || 'Logo'}
+          className={`object-contain transition-all duration-300 ${collapsed ? 'h-8 w-8' : 'h-11 max-w-[136px]'}`}
+        />
+      ) : (
+        <div className="w-7 h-7 bg-purple-500 rounded-lg flex items-center justify-center flex-shrink-0 shadow-[0_0_16px_rgba(168,85,247,0.4)]">
+          <Scissors className="w-3.5 h-3.5 text-white" />
+        </div>
+      )}
+      {!collapsed && (
+        <p className="text-[10px] text-purple-400 font-bold uppercase tracking-widest leading-none">
+          {user?.role_display}
+        </p>
+      )}
     </div>
-    {!collapsed && (
-      <div className="overflow-hidden">
-        <p className="font-black text-white text-[13px] truncate leading-none">{user?.barbershop_name || 'Synapsia'}</p>
-        <p className="text-[10px] text-purple-400 font-bold uppercase tracking-widest mt-0.5">{user?.role_display}</p>
-      </div>
-    )}
-  </div>
-);
+  );
+};
 
 // ─── Main Layout ──────────────────────────────────────────────────────────────
 const DashboardLayout = () => {
@@ -173,15 +183,25 @@ const DashboardLayout = () => {
         style={SIDEBAR_STYLE}
       >
         {/* Header with close button */}
-        <div className="flex items-center justify-between px-3 py-4 border-b border-white/[0.06]">
-          <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 bg-purple-500 rounded-lg flex items-center justify-center flex-shrink-0 shadow-[0_0_16px_rgba(168,85,247,0.4)]">
-              <Scissors className="w-3.5 h-3.5 text-white" />
-            </div>
-            <div>
-              <p className="font-black text-white text-[13px] truncate leading-none">{user?.barbershop_name || 'Synapsia'}</p>
-              <p className="text-[10px] text-purple-400 font-bold uppercase tracking-widest mt-0.5">{user?.role_display}</p>
-            </div>
+        <div className="flex items-center justify-between px-3 py-3 border-b border-white/[0.06]">
+          <div className="flex flex-col gap-1">
+            {user?.barbershop_logo_url ? (
+              <img
+                src={user.barbershop_logo_url}
+                alt={user?.barbershop_name || 'Logo'}
+                className="h-10 max-w-[120px] object-contain"
+              />
+            ) : (
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 bg-purple-500 rounded-lg flex items-center justify-center flex-shrink-0 shadow-[0_0_16px_rgba(168,85,247,0.4)]">
+                  <Scissors className="w-3.5 h-3.5 text-white" />
+                </div>
+                <p className="font-black text-white text-[13px] leading-none">{user?.barbershop_name || 'Synapsia'}</p>
+              </div>
+            )}
+            <p className="text-[10px] text-purple-400 font-bold uppercase tracking-widest leading-none">
+              {user?.role_display}
+            </p>
           </div>
           <button onClick={() => setMobileOpen(false)} className="text-gray-500 hover:text-white p-1.5 rounded-lg hover:bg-white/5 transition-colors">
             <X className="w-5 h-5" />

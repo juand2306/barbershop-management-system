@@ -1,15 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../api/axios';
 import { toast } from 'react-toastify';
-import { Settings as SettingsIcon, CreditCard, Users, Shield, Plus, Lock, Edit2, UserX, UserCheck, Globe, QrCode, Save } from 'lucide-react';
+import { Settings as SettingsIcon, CreditCard, Users, Shield, Plus, Lock, Edit2, UserX, UserCheck, Globe, QrCode, Save, Camera, ImageOff } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import Modal from '../../components/Modal';
+import { useAuth } from '../../context/AuthContext';
 
 const Settings = () => {
   const queryClient = useQueryClient();
+  const { refreshUser } = useAuth();
   const [activeTab, setActiveTab] = useState('payment');
-  
+
   // States for Payment Method
   const [newMethod, setNewMethod] = useState('');
   const [editMethodTarget, setEditMethodTarget] = useState(null);
@@ -27,6 +29,10 @@ const Settings = () => {
   // Barbershop info form state
   const [shopForm, setShopForm] = useState(null); // null = not loaded yet
   const [qrSize, setQrSize] = useState(200);
+
+  // Logo upload state
+  const logoInputRef = useRef(null);
+  const [logoPreview, setLogoPreview] = useState(null);
 
   // Queries
   const { data: currentMethods, isLoading: loadingMethods } = useQuery(['paymentMethods'], async () => {
@@ -192,10 +198,40 @@ const Settings = () => {
     mutationFn: (data) => api.patch(`/barbershop/${shopData?.id}/`, data),
     onSuccess: () => {
       queryClient.invalidateQueries(['barbershop-info']);
-      toast.success('Informacion del negocio actualizada. La landing refleja los cambios.');
+      toast.success('Información del negocio actualizada. La landing refleja los cambios.');
     },
-    onError: (err) => toast.error(err.response?.data?.detail || 'Error guardando informacion'),
+    onError: (err) => toast.error(err.response?.data?.detail || 'Error guardando información'),
   });
+
+  // Mutation to upload barbershop logo
+  const uploadLogo = useMutation({
+    mutationFn: ({ id, file }) => {
+      const fd = new FormData();
+      fd.append('logo', file);
+      return api.post(`/barbershop/${id}/upload-logo/`, fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+    },
+    onSuccess: (res) => {
+      queryClient.invalidateQueries(['barbershop-info']);
+      setShopForm(f => f ? { ...f, logo_url: res.data.logo_url } : f);
+      setLogoPreview(null);
+      refreshUser(); // actualiza el navbar en tiempo real
+      toast.success('¡Logo actualizado! El navbar refleja el cambio.');
+    },
+    onError: (err) => {
+      setLogoPreview(null);
+      toast.error(err.response?.data?.error || 'Error al subir el logo');
+    },
+  });
+
+  const handleLogoChange = (e) => {
+    const file = e.target.files[0];
+    if (!file || !shopData?.id) return;
+    setLogoPreview(URL.createObjectURL(file));
+    uploadLogo.mutate({ id: shopData.id, file });
+    e.target.value = '';
+  };
 
   // Handlers
   const handleAddMethod = (e) => {
@@ -460,6 +496,63 @@ const Settings = () => {
               </h2>
               {shopForm ? (
                 <div className="space-y-3">
+
+                  {/* ── Logo upload ── */}
+                  <div>
+                    <p className="text-[10px] uppercase font-black text-gray-500 tracking-widest mb-2">Logo del Negocio</p>
+                    <div className="flex items-center gap-4 p-3 rounded-xl border border-white/10 bg-white/[0.02]">
+                      {/* Preview */}
+                      <div
+                        className="relative cursor-pointer group flex-shrink-0 w-20 h-14 rounded-lg border border-white/10 bg-white/5 flex items-center justify-center overflow-hidden"
+                        onClick={() => logoInputRef.current?.click()}
+                        title="Cambiar logo"
+                      >
+                        {uploadLogo.isLoading ? (
+                          <div className="w-5 h-5 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
+                        ) : (logoPreview || shopForm.logo_url) ? (
+                          <img
+                            src={logoPreview || shopForm.logo_url}
+                            alt="Logo"
+                            className="w-full h-full object-contain p-1"
+                          />
+                        ) : (
+                          <ImageOff className="w-6 h-6 text-gray-600" />
+                        )}
+                        {/* Hover overlay */}
+                        {!uploadLogo.isLoading && (
+                          <div className="absolute inset-0 rounded-lg bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Camera className="w-5 h-5 text-white" />
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Info + trigger */}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-bold text-white">
+                          {uploadLogo.isLoading ? 'Subiendo a Cloudinary...' : shopForm.logo_url ? 'Logo configurado' : 'Sin logo'}
+                        </p>
+                        <p className="text-[11px] text-gray-500 mt-0.5">JPG, PNG, WebP o SVG · Máx. 5 MB</p>
+                        <p className="text-[11px] text-gray-600 mt-0.5">Se muestra en el navbar y en la landing page</p>
+                        <button
+                          type="button"
+                          onClick={() => logoInputRef.current?.click()}
+                          disabled={uploadLogo.isLoading}
+                          className="text-[11px] text-cyan-400 font-bold hover:text-cyan-300 transition-colors mt-1.5 disabled:opacity-50"
+                        >
+                          {uploadLogo.isLoading ? 'Subiendo...' : shopForm.logo_url ? 'Cambiar logo' : 'Subir logo'}
+                        </button>
+                      </div>
+
+                      <input
+                        ref={logoInputRef}
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,image/svg+xml"
+                        className="hidden"
+                        onChange={handleLogoChange}
+                      />
+                    </div>
+                  </div>
+
                   <div className="space-y-1"><label className="text-[10px] uppercase font-black text-gray-500 tracking-widest">Nombre</label>
                     <input className="input-glass" value={shopForm.name} onChange={e => setShopForm(f => ({ ...f, name: e.target.value }))} /></div>
                   <div className="space-y-1"><label className="text-[10px] uppercase font-black text-gray-500 tracking-widest">Descripcion / Slogan</label>

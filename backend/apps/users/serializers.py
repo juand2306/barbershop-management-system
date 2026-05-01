@@ -6,13 +6,14 @@ from apps.barbershop.models import Barbershop
 class UserSerializer(serializers.ModelSerializer):
     role_display = serializers.CharField(source='get_role_display', read_only=True)
     barbershop_name = serializers.CharField(source='barbershop.name', read_only=True)
+    barbershop_logo_url = serializers.URLField(source='barbershop.logo_url', read_only=True, allow_null=True)
 
     class Meta:
         model = User
         fields = (
             'id', 'username', 'email', 'first_name', 'last_name',
             'role', 'role_display', 'phone', 'active',
-            'barbershop', 'barbershop_name'
+            'barbershop', 'barbershop_name', 'barbershop_logo_url'
         )
         read_only_fields = ('id', 'barbershop')
 
