@@ -14,6 +14,7 @@ class ProductViewSet(viewsets.ModelViewSet):
     Soft-delete: Productos se marcan como inactive en lugar de eliminarse.
     """
     serializer_class = ProductSerializer
+    pagination_class = None
     
     def get_permissions(self):
         """
