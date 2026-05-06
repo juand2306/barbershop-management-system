@@ -79,6 +79,10 @@ class Advance(models.Model):
         verbose_name = 'Vale'
         verbose_name_plural = 'Vales'
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['barbershop', 'status'], name='advance_shop_status_idx'),
+            models.Index(fields=['barbershop', 'created_at'], name='advance_shop_created_idx'),
+        ]
 
     def __str__(self):
         return f"Vale {self.barber.name} | ${self.amount:,.0f} | {self.status}"

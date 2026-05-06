@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from .models import Appointment
 from django.utils import timezone
+from django.utils.timezone import localtime
 import datetime
 
 
@@ -33,14 +34,88 @@ class AppointmentSerializer(serializers.ModelSerializer):
 
     def validate_appointment_datetime(self, value):
         """
-        Validación de fecha: Los bookings online no pueden ser en el pasado.
-        El staff interno (receptionist/admin) SÍ puede agendar en cualquier horario,
-        ya que pueden necesitar registrar citas retroactivas o del mismo día ya transcurrido.
+        Bookings online: no pueden ser en el pasado (tolerancia 5 min).
+        Staff interno: validación de rango máximo 30 min se hace en validate().
         """
         request = self.context.get('request')
-        # Si es booking online (sin token de usuario autenticado) => no permitir pasado
         is_internal = request and request.user and request.user.is_authenticated
         if not is_internal:
             if value < timezone.now() - datetime.timedelta(minutes=5):
                 raise serializers.ValidationError("No se puede agendar una cita en el pasado.")
         return value
+
+    def validate(self, data):
+        """
+        Validaciones cruzadas:
+        1. Staff interno: no más de 30 minutos en el pasado.
+        2. Todos: no double-booking — el barbero no puede tener otra cita activa
+           que se solape con el rango [start, start+duration).
+        """
+        request = self.context.get('request')
+
+        # En actualizaciones parciales, completar con los valores actuales del objeto
+        appointment_datetime = data.get('appointment_datetime')
+        barber = data.get('barber')
+        service = data.get('service')
+
+        if self.instance:
+            appointment_datetime = appointment_datetime or self.instance.appointment_datetime
+            barber = barber or self.instance.barber
+            service = service or self.instance.service
+
+        if not appointment_datetime:
+            return data
+
+        is_internal = request and request.user and request.user.is_authenticated
+
+        # ── 1. Límite de tiempo en el pasado para staff interno ──────────────
+        if is_internal:
+            limit = timezone.now() - datetime.timedelta(minutes=30)
+            if appointment_datetime < limit:
+                raise serializers.ValidationError({
+                    'appointment_datetime': (
+                        'No se puede agendar una cita con más de 30 minutos en el pasado.'
+                    )
+                })
+
+        # ── 2. Verificación de disponibilidad (anti double-booking) ──────────
+        if barber and service:
+            duration = getattr(service, 'duration_minutes', 0)
+            if duration > 0:
+                new_start = appointment_datetime
+                new_end = new_start + datetime.timedelta(minutes=duration)
+
+                existing_qs = (
+                    Appointment.objects
+                    .filter(
+                        barber=barber,
+                        status__in=['pendiente', 'confirmada'],
+                        service__isnull=False,
+                        appointment_datetime__date=appointment_datetime.date(),
+                    )
+                    .select_related('service')
+                )
+
+                # Excluir la propia cita en caso de actualización
+                if self.instance:
+                    existing_qs = existing_qs.exclude(pk=self.instance.pk)
+
+                for appt in existing_qs:
+                    if not appt.service:
+                        continue
+                    existing_start = appt.appointment_datetime
+                    existing_end = existing_start + datetime.timedelta(
+                        minutes=appt.service.duration_minutes
+                    )
+                    # Dos intervalos [s1,e1) y [s2,e2) se solapan si s1 < e2 AND s2 < e1
+                    if new_start < existing_end and existing_start < new_end:
+                        ls = localtime(existing_start).strftime('%I:%M %p')
+                        le = localtime(existing_end).strftime('%I:%M %p')
+                        raise serializers.ValidationError({
+                            'appointment_datetime': (
+                                f'El barbero ya tiene una cita de {ls} a {le}. '
+                                f'Por favor elige otro horario.'
+                            )
+                        })
+
+        return data

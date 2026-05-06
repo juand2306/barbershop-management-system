@@ -49,6 +49,59 @@ const formatTime = (isoString) => {
   }
 };
 
+// ─── Overlap column-layout algorithm ─────────────────────────────────────────
+// Returns a map of { eventId → { col, totalCols } } so overlapping events are
+// rendered side-by-side instead of fully stacking on top of each other.
+const computeEventColumns = (events) => {
+  if (!events.length) return {};
+
+  // Sort by start time (earliest first; longer events first on tie)
+  const sorted = [...events].sort((a, b) => {
+    const diff = new Date(a.start) - new Date(b.start);
+    return diff !== 0 ? diff : b.duration_minutes - a.duration_minutes;
+  });
+
+  // Greedy column assignment: place each event in the first column where it fits
+  const colEndTimes = []; // colEndTimes[col] = end-time in minutes of last event placed there
+  const meta = {};        // eventId → { col }
+
+  sorted.forEach(event => {
+    const startMins = toMinutesFromMidnight(event.start);
+    const endMins   = startMins + (event.duration_minutes || 30);
+
+    let placed = false;
+    for (let c = 0; c < colEndTimes.length; c++) {
+      if (startMins >= colEndTimes[c]) {
+        colEndTimes[c] = endMins;
+        meta[event.id] = { col: c };
+        placed = true;
+        break;
+      }
+    }
+    if (!placed) {
+      meta[event.id] = { col: colEndTimes.length };
+      colEndTimes.push(endMins);
+    }
+  });
+
+  // For each event, totalCols = how many events overlap with it (including itself)
+  // This tells the renderer how wide a "slice" this event should take.
+  sorted.forEach(event => {
+    const s1 = toMinutesFromMidnight(event.start);
+    const e1 = s1 + (event.duration_minutes || 30);
+
+    const concurrent = sorted.filter(other => {
+      const s2 = toMinutesFromMidnight(other.start);
+      const e2 = s2 + (other.duration_minutes || 30);
+      return s1 < e2 && s2 < e1; // standard interval overlap (includes self)
+    }).length;
+
+    meta[event.id].totalCols = Math.max(concurrent, meta[event.id].col + 1);
+  });
+
+  return meta;
+};
+
 // ─── Color theme per event type ───────────────────────────────────────────────
 const EVENT_STYLES = {
   cita: {
@@ -84,7 +137,8 @@ const TimeSlotLabel = ({ hour, isHalf }) => (
   </div>
 );
 
-const EventBlock = ({ event, onClick }) => {
+const EventBlock = ({ event, onClick, col = 0, totalCols = 1 }) => {
+  const [hovered, setHovered] = useState(false);
   const styles = EVENT_STYLES[event.type] || EVENT_STYLES.cita;
   const startMins = toMinutesFromMidnight(event.start);
   const top = minutesToPosition(startMins);
@@ -97,28 +151,48 @@ const EventBlock = ({ event, onClick }) => {
 
   const isShort = clampedHeight < 50;
 
+  // Column-split layout: when events overlap, each gets a fractional slice
+  const GAP = 2; // px gap between side-by-side events
+  const leftPct   = totalCols > 1 ? (col / totalCols) * 100 : 0;
+  const widthPct  = totalCols > 1 ? (1 / totalCols) * 100  : 100;
+  const leftStyle  = totalCols > 1
+    ? `calc(${leftPct}% + ${GAP}px)`
+    : `${GAP + 1}px`;
+  const rightStyle = totalCols > 1
+    ? `calc(${100 - leftPct - widthPct}% + ${GAP}px)`
+    : `${GAP + 1}px`;
+
   return (
     <div
       onClick={() => onClick(event)}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       title={`${event.client_name} — ${event.service_name}`}
       style={{
         position: 'absolute',
         top: `${clampedTop}px`,
-        left: '3px',
-        right: '3px',
+        left: leftStyle,
+        right: rightStyle,
         height: `${clampedHeight - 2}px`,
-        background: styles.bg,
+        background: hovered
+          ? styles.bg.replace(/[\d.]+\)$/, '0.35)')
+          : styles.bg,
         border: `1.5px solid ${styles.border}`,
         borderLeft: `3px solid ${styles.border}`,
         borderRadius: '4px',
         padding: isShort ? '3px 6px' : '6px 8px',
         cursor: 'pointer',
-        zIndex: 10,
+        // Inline z-index controlled by state so hover actually works
+        zIndex: hovered ? 50 : 10,
         overflow: 'hidden',
         transition: 'all 0.15s ease',
         backdropFilter: 'blur(4px)',
+        filter: hovered ? 'brightness(1.25)' : 'none',
+        boxShadow: hovered
+          ? `0 4px 20px ${styles.border}55, 0 0 0 1px ${styles.border}60`
+          : 'none',
       }}
-      className="event-block group hover:brightness-125 hover:z-20"
+      className="event-block"
     >
       {!isShort && (
         <div className="flex items-center gap-1 mb-0.5">
@@ -292,6 +366,15 @@ const NewAppointmentModal = ({ selectedSlot, barbers, services, onClose, onSucce
       toast.error('Completa todos los campos requeridos');
       return;
     }
+
+    // Client-side past-time guard: max 30 min in the past
+    const appointmentDate = new Date(form.appointment_datetime);
+    const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000);
+    if (appointmentDate < thirtyMinAgo) {
+      toast.error('No se puede agendar una cita con más de 30 minutos en el pasado');
+      return;
+    }
+
     createAppointment.mutate({
       ...form,
       barber: parseInt(form.barber),
@@ -556,7 +639,7 @@ const CalendarPage = () => {
   const barbers = barbersData || [];
   const services = servicesData || [];
 
-  // Group events by barber
+  // Group events by barber and compute overlap column layout
   const eventsByBarber = useMemo(() => {
     const map = {};
     barbers.forEach(b => { map[b.id] = []; });
@@ -568,7 +651,18 @@ const CalendarPage = () => {
         map['__unassigned'].push(e);
       }
     });
-    return map;
+
+    // Enrich each event with col/totalCols for side-by-side overlap rendering
+    const enriched = {};
+    Object.entries(map).forEach(([barberId, barberEvents]) => {
+      const colMeta = computeEventColumns(barberEvents);
+      enriched[barberId] = barberEvents.map(ev => ({
+        ...ev,
+        col:       colMeta[ev.id]?.col       ?? 0,
+        totalCols: colMeta[ev.id]?.totalCols ?? 1,
+      }));
+    });
+    return enriched;
   }, [events, barbers]);
 
   // Scroll to current time on mount
@@ -833,6 +927,8 @@ const CalendarPage = () => {
                     key={event.id}
                     event={event}
                     onClick={e => { setSelectedEvent(e); }}
+                    col={event.col}
+                    totalCols={event.totalCols}
                   />
                 ))}
               </div>

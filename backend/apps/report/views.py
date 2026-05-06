@@ -2,7 +2,7 @@ from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.db import transaction, models
-from django.db.models import Sum, F, ExpressionWrapper, DecimalField
+from django.db.models import Sum, F, ExpressionWrapper, DecimalField, Prefetch
 
 from .models import DailyReport, DailyReportPaymentBreakdown, BarberDailyCommission
 from .serializers import DailyReportSerializer
@@ -32,7 +32,11 @@ class DailyReportViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = DailyReport.objects.prefetch_related(
-            'payment_breakdown', 'barber_commissions'
+            'payment_breakdown',
+            Prefetch(
+                'barber_commissions',
+                queryset=BarberDailyCommission.objects.select_related('barber')
+            )
         ).filter(barbershop=self.request.user.barbershop)
         
         status_filter = self.request.query_params.get('status')
@@ -181,11 +185,12 @@ class DailyReportViewSet(viewsets.ModelViewSet):
                 BarberDailyCommission.objects.bulk_create(barber_commissions_list)
 
             # 4. Desglose por Método de Pago
-            # Para pagos simples usamos el FK directo; para pagos mixtos sumamos los splits.
+            # Pre-agregamos TODOS los totales en 7 queries (1 por tipo de movimiento)
+            # antes del loop para eliminar el N+1 de 7 queries × N métodos de pago.
             payment_methods = PaymentMethod.objects.filter(barbershop=barbershop, active=True)
             breakdowns_list = []
 
-            # Pre-calcular splits del día para no repetir queries en cada iteración
+            # Splits del día (se usan en las pre-agregaciones de abajo)
             service_splits_day = ServiceRecordPaymentSplit.objects.filter(
                 service_record__in=services
             )
@@ -193,32 +198,37 @@ class DailyReportViewSet(viewsets.ModelViewSet):
                 product_sale__in=product_sales
             )
 
+            # ── Pre-agregaciones por método de pago (7 queries totales) ─────────
+            def _agg_by_pm(qs, field):
+                """Devuelve dict {payment_method_id: total} con una sola query."""
+                return {
+                    row['payment_method_id']: row['total'] or 0
+                    for row in qs.values('payment_method_id').annotate(total=Sum(field))
+                }
+
+            services_simple_by_pm = _agg_by_pm(
+                services.filter(is_mixed_payment=False), 'price_charged'
+            )
+            service_splits_by_pm = _agg_by_pm(service_splits_day, 'amount')
+
+            products_simple_by_pm = _agg_by_pm(
+                product_sales.filter(is_mixed_payment=False), 'total_price'
+            )
+            product_splits_by_pm = _agg_by_pm(product_splits_day, 'amount')
+
+            adv_pays_by_pm  = _agg_by_pm(advance_payments, 'amount')
+            expenses_by_pm  = _agg_by_pm(expenses, 'amount')
+            advances_by_pm  = _agg_by_pm(advances, 'amount')
+            # ────────────────────────────────────────────────────────────────────
+
             for pm in payment_methods:
-                # Servicios: pagos simples + splits mixtos
-                pm_services_simple = (
-                    services.filter(payment_method=pm, is_mixed_payment=False)
-                    .aggregate(Sum('price_charged'))['price_charged__sum'] or 0
-                )
-                pm_services_splits = (
-                    service_splits_day.filter(payment_method=pm)
-                    .aggregate(Sum('amount'))['amount__sum'] or 0
-                )
-                pm_services = pm_services_simple + pm_services_splits
-
-                # Productos: pagos simples + splits mixtos
-                pm_products_simple = (
-                    product_sales.filter(payment_method=pm, is_mixed_payment=False)
-                    .aggregate(Sum('total_price'))['total_price__sum'] or 0
-                )
-                pm_products_splits = (
-                    product_splits_day.filter(payment_method=pm)
-                    .aggregate(Sum('amount'))['amount__sum'] or 0
-                )
-                pm_products = pm_products_simple + pm_products_splits
-
-                pm_adv_pays = advance_payments.filter(payment_method=pm).aggregate(Sum('amount'))['amount__sum'] or 0
-                pm_expenses = expenses.filter(payment_method=pm).aggregate(Sum('amount'))['amount__sum'] or 0
-                pm_advances = advances.filter(payment_method=pm).aggregate(Sum('amount'))['amount__sum'] or 0
+                pm_services  = (services_simple_by_pm.get(pm.id, 0)
+                                + service_splits_by_pm.get(pm.id, 0))
+                pm_products  = (products_simple_by_pm.get(pm.id, 0)
+                                + product_splits_by_pm.get(pm.id, 0))
+                pm_adv_pays  = adv_pays_by_pm.get(pm.id, 0)
+                pm_expenses  = expenses_by_pm.get(pm.id, 0)
+                pm_advances  = advances_by_pm.get(pm.id, 0)
 
                 # Solo crear registro de desglose si hubo algun movimiento con este metodo
                 if any([pm_services, pm_products, pm_adv_pays, pm_expenses, pm_advances]):

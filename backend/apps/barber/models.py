@@ -40,6 +40,9 @@ class Barber(models.Model):
                 name='unique_barber_document_per_barbershop'
             )
         ]
+        indexes = [
+            models.Index(fields=['barbershop', 'active'], name='barber_shop_active_idx'),
+        ]
     
     def __str__(self):
         return f"{self.name} - {self.barbershop.name}"
@@ -69,6 +72,9 @@ class BarberDailyActive(models.Model):
         verbose_name = "Barbero Activo Diario"
         verbose_name_plural = "Barberos Activos Diarios"
         unique_together = ('barber', 'work_date')
+        indexes = [
+            models.Index(fields=['barbershop', 'work_date', 'is_active'], name='bda_shop_date_active_idx'),
+        ]
     
     def __str__(self):
         return f"{self.barber.name} - {self.work_date}"
