@@ -105,6 +105,7 @@ class ProductSaleViewSet(viewsets.ModelViewSet):
     serializer_class = ProductSaleSerializer
     permission_classes = [permissions.IsAuthenticated]
     http_method_names = ['get', 'post', 'delete', 'head', 'options']
+    pagination_class = None  # Retornar todas las ventas del rango sin cortar
 
     def get_queryset(self):
         qs = ProductSale.objects.select_related('product', 'barber', 'payment_method').filter(

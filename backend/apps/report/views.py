@@ -25,6 +25,7 @@ class DailyReportViewSet(viewsets.ModelViewSet):
     """
     serializer_class = DailyReportSerializer
     permission_classes = [permissions.IsAuthenticated]
+    pagination_class = None  # Los cierres son pocos; retornar todos
 
     def get_permissions(self):
         return [IsAdminOrManager()]

@@ -10,6 +10,7 @@ class ExpenseViewSet(viewsets.ModelViewSet):
     Filtrado por fecha y categoria.
     """
     serializer_class = ExpenseSerializer
+    pagination_class = None  # Filtrado por fechas; retornar todos sin cortar
 
     def get_permissions(self):
         """

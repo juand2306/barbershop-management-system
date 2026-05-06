@@ -14,6 +14,7 @@ class AdvanceViewSet(viewsets.ModelViewSet):
     """
     serializer_class = AdvanceSerializer
     permission_classes = [permissions.IsAuthenticated]
+    pagination_class = None  # Retornar todos los vales del rango sin cortar
 
     def get_queryset(self):
         qs = Advance.objects.prefetch_related('payments').select_related(
@@ -124,6 +125,7 @@ class AdvancePaymentViewSet(viewsets.ReadOnlyModelViewSet):
     """
     serializer_class = AdvancePaymentSerializer
     permission_classes = [permissions.IsAuthenticated]
+    pagination_class = None
 
     def get_queryset(self):
         qs = AdvancePayment.objects.select_related(

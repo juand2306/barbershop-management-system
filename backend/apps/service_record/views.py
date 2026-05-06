@@ -16,6 +16,7 @@ class ServiceRecordViewSet(viewsets.ModelViewSet):
     """
     serializer_class = ServiceRecordSerializer
     permission_classes = [permissions.IsAuthenticated]
+    pagination_class = None  # El histórico filtra por fechas; no limitar resultados
 
     def get_queryset(self):
         qs = ServiceRecord.objects.select_related(
