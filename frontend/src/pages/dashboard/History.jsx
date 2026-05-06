@@ -341,9 +341,11 @@ const ServiciosTab = ({ filters, onFilterChange, barbers, paymentMethods }) => {
   const byBarber = useMemo(() => {
     const map = {};
     filtered.forEach(r => {
-      map[r.barber_name] = (map[r.barber_name] || 0) + Number(r.price_charged || 0);
+      const key = r.barber_name || 'Sin asignar';
+      map[key] = (map[key] || 0) + Number(r.price_charged || 0);
     });
-    const top = Object.entries(map).sort((a, b) => b[1] - a[1])[0];
+    const entries = Object.entries(map).filter(([k]) => k !== 'Sin asignar');
+    const top = entries.sort((a, b) => b[1] - a[1])[0];
     return top ? `${top[0]}: ${fmt(top[1])}` : '—';
   }, [filtered]);
 

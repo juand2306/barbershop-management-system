@@ -71,6 +71,14 @@ class DailyReportViewSet(viewsets.ModelViewSet):
         except ValueError:
             return Response({"error": "Formato de fecha invalido. Use YYYY-MM-DD."}, status=status.HTTP_400_BAD_REQUEST)
 
+        # No permitir cierres para fechas futuras
+        today = datetime.date.today()
+        if target_date > today:
+            return Response(
+                {"error": "No se puede generar un cierre para una fecha futura."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         barbershop = request.user.barbershop
 
         with transaction.atomic():

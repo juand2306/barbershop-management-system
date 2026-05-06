@@ -10,7 +10,7 @@ import {
   Scissors, DollarSign, Users, TrendingUp,
   AlertTriangle, Package, Calendar
 } from 'lucide-react';
-import { safeN } from '../../utils/helpers';
+import { safeN, fmt } from '../../utils/helpers';
 import { format, subDays } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -199,7 +199,7 @@ const HomeDashboard = () => {
         </div>
       ) : (
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 md:gap-4">
-          <StatCard title="Ingresos Hoy"     value={`$${safeN(todaySummary?.total_amount).toLocaleString()}`} subtext="Facturado por servicios" icon={DollarSign} color="#10b981" />
+          <StatCard title="Ingresos Hoy"     value={fmt(todaySummary?.total_amount)}                         subtext="Facturado por servicios" icon={DollarSign} color="#10b981" />
           <StatCard title="Cortes Hoy"       value={todaySummary?.total_services || 0}                       subtext="Servicios finalizados"  icon={Scissors}   color="#a855f7" />
           <StatCard title="Barberos Activos" value={Array.isArray(barbersActive) ? barbersActive.length : 0} subtext="Personal en turno"      icon={Users}      color="#06b6d4" />
           <StatCard title="Citas Hoy"        value={todayAppointments?.length || 0}                          subtext="Turnos agendados"        icon={Calendar}   color="#f59e0b" />
@@ -284,7 +284,7 @@ const HomeDashboard = () => {
               <p className="text-gray-600 text-[10px] uppercase tracking-widest font-bold mt-0.5">Últimos 7 cierres</p>
             </div>
             <div className="bg-purple-500/10 border border-purple-500/20 px-3 py-1 rounded-lg">
-              <p className="text-purple-400 font-black text-xs uppercase tracking-widest">${safeN(totals30.income).toLocaleString()} / 30d</p>
+              <p className="text-purple-400 font-black text-xs uppercase tracking-widest">{fmt(totals30.income)} / 30d</p>
             </div>
           </div>
           {barData.length > 0 ? (
@@ -356,8 +356,8 @@ const HomeDashboard = () => {
       {/* ── 30-DAY SUMMARY STRIP ── */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
         {[
-          { label: '30d Ingresos', value: `$${safeN(totals30.income).toLocaleString()}`, color: '#a855f7', icon: TrendingUp },
-          { label: '30d Ganancia', value: `$${safeN(totals30.profit).toLocaleString()}`, color: '#10b981', icon: DollarSign },
+          { label: '30d Ingresos', value: fmt(totals30.income), color: '#a855f7', icon: TrendingUp },
+          { label: '30d Ganancia', value: fmt(totals30.profit), color: '#10b981', icon: DollarSign },
           { label: 'Citas Hoy',   value: todayAppointments?.length || 0,                color: '#f59e0b', icon: Calendar },
         ].map(({ label, value, color, icon: Icon }) => (
           <div key={label} className="glass-panel p-4 border-white/5 flex items-center gap-4">

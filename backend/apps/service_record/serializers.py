@@ -55,6 +55,14 @@ class ServiceRecordSerializer(serializers.ModelSerializer):
         payment_method = data.get('payment_method')
         price_charged = data.get('price_charged', Decimal('0'))
 
+        # ── Validación de que el barbero pertenece a la barbería ───────────
+        request = self.context.get('request')
+        if barber and request and request.user.is_authenticated:
+            if barber.barbershop_id != request.user.barbershop_id:
+                raise serializers.ValidationError({
+                    "barber": "El barbero no pertenece a esta barbería."
+                })
+
         # ── Validación de turno activo ──────────────────────────────────────
         if barber and not self.instance:
             service_datetime = data.get('service_datetime', timezone.now())

@@ -13,6 +13,7 @@ class AppointmentViewSet(viewsets.ModelViewSet):
     CRUD completo para el manejo y recepcion de citas en la barberia.
     """
     serializer_class = AppointmentSerializer
+    pagination_class = None  # El calendario y listas filtran por fecha; retornar todo el rango
     
     def get_permissions(self):
         """
@@ -29,11 +30,14 @@ class AppointmentViewSet(viewsets.ModelViewSet):
         return [permission() for permission in permission_classes]
 
     def get_queryset(self):
-        # Si no hay token, asume trafico publico (web de reservas /disponibilidad o similar)
         qs = Appointment.objects.select_related('barber', 'service', 'service_record')
 
         if self.request.user and self.request.user.is_authenticated:
-             qs = qs.filter(barbershop=self.request.user.barbershop)
+            qs = qs.filter(barbershop=self.request.user.barbershop)
+        else:
+            # Tráfico público (reservar_online): retornar queryset vacío en list/retrieve.
+            # Las acciones públicas (reservar_online) gestionan su propia lógica de barbershop.
+            return qs.none()
 
         # Filtros
         status_filter = self.request.query_params.get('status')

@@ -14,8 +14,11 @@ export const extractApiError = (err) => {
 export const getLocalDateStr = () => new Intl.DateTimeFormat('en-CA').format(new Date());
 
 export const fmt = (val) => {
-  if (!val && val !== 0) return '$0';
-  return `$${Number(val).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+  if (val === null || val === undefined || val === '') return '$0';
+  // Math.round() elimina artefactos de punto flotante (ej: 71999.9999 → 72000)
+  const n = Math.round(Number(val));
+  if (isNaN(n)) return '$0';
+  return `$${n.toLocaleString('es-CO')}`;
 };
 
 export const safeN = (v) => { const n = Number(v); return isNaN(n) ? 0 : n; };

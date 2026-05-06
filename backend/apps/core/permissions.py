@@ -3,12 +3,14 @@ from rest_framework import permissions
 def assign_default_barbershop(user):
     """
     Garantiza que el superusuario tenga una Barbershop asignada para no violar
-    restricciones NOT NULL. Solo se ejecuta cuando barbershop es None y no se
-    habia procesado antes en esta instancia del objeto user.
+    restricciones NOT NULL. Solo toca la DB si: es superuser Y no tiene barbershop.
+    La flag _barbershop_assigned evita re-entradas en el mismo ciclo de request.
     """
+    # Salida rápida: solo aplica a superusuarios sin barbershop
     if not (user and user.is_authenticated and user.is_superuser):
         return
-    if user.barbershop:
+    # Si ya tiene barbershop_id (FK int), no tocar la DB
+    if getattr(user, 'barbershop_id', None):
         return
     # Flag para evitar re-entradas dentro del mismo ciclo de request
     if getattr(user, '_barbershop_assigned', False):

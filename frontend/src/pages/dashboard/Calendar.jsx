@@ -497,6 +497,21 @@ const CalendarPage = () => {
     onError: () => toast.error('Error al actualizar el estado'),
   });
   const gridRef = useRef(null);
+  const topScrollRef = useRef(null);
+  const innerScrollRef = useRef(null);
+
+  // Sync top phantom scrollbar → inner grid (horizontal)
+  const onTopScroll = () => {
+    if (innerScrollRef.current && topScrollRef.current) {
+      innerScrollRef.current.scrollLeft = topScrollRef.current.scrollLeft;
+    }
+  };
+  // Sync inner grid scroll → top phantom scrollbar (horizontal)
+  const onInnerScroll = () => {
+    if (topScrollRef.current && innerScrollRef.current) {
+      topScrollRef.current.scrollLeft = innerScrollRef.current.scrollLeft;
+    }
+  };
 
   const dateStr = format(currentDate, 'yyyy-MM-dd');
   const dateLabel = format(currentDate, "EEEE d 'de' MMMM yyyy", { locale: es });
@@ -658,6 +673,16 @@ const CalendarPage = () => {
         </div>
       </div>
 
+      {/* ── Top phantom scrollbar (mirrors horizontal scroll del grid) ── */}
+      <div
+        ref={topScrollRef}
+        onScroll={onTopScroll}
+        className="custom-scrollbar mb-1 flex-shrink-0"
+        style={{ overflowX: 'auto', overflowY: 'hidden', height: '12px' }}
+      >
+        <div style={{ minWidth: `${TIME_COL_W + Math.max(barbers.length, 1) * 160}px`, height: '1px' }} />
+      </div>
+
       {/* ── Calendar Grid ─────────────────────── */}
       <div
         className="flex-1 rounded-lg overflow-hidden calendar-scroll"
@@ -678,6 +703,8 @@ const CalendarPage = () => {
           </div>
         ) : (
           <div
+            ref={innerScrollRef}
+            onScroll={onInnerScroll}
             style={{
               display: 'grid',
               gridTemplateColumns: `${TIME_COL_W}px ${barbers.length > 0 ? `repeat(${barbers.length}, minmax(160px, 1fr))` : 'minmax(280px, 1fr)'}`,

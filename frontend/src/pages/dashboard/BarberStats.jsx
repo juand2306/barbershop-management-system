@@ -13,7 +13,6 @@ import {
 } from 'lucide-react';
 import { fmt, safeN } from '../../utils/helpers';
 import { format, subDays, startOfMonth, endOfMonth, startOfWeek, endOfWeek } from 'date-fns';
-import { es } from 'date-fns/locale';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -78,54 +77,28 @@ const BarberStats = () => {
   const [showPeriodMenu, setShowPeriodMenu] = useState(false);
   const { from, to } = getPeriodDates(period);
 
-  // Service records for period
-  const { data: records, isLoading } = useQuery(
+  // Totales por barbero agregados en DB — sin paginación, siempre correctos
+  const { data: rawStats, isLoading } = useQuery(
     ['barber-stats', from, to],
-    () => api.get(`/service-records/?date_from=${from}&date_to=${to}&limit=2000`)
-      .then(r => r.data.results || r.data),
-    { staleTime: 60000 }
+    () => api.get(`/service-records/resumen-por-barbero/?date_from=${from}&date_to=${to}`)
+      .then(r => r.data),
+    { staleTime: 30000 }  // 30s: balance entre frescura y peticiones al servidor
   );
 
-  // Barber list (for names/specialties of those with 0 records too)
-  const { data: barberList } = useQuery(
-    ['barbers'],
-    () => api.get('/barbers/?limit=100').then(r => r.data.results || r.data),
-    { staleTime: 300000 }
-  );
-
-  // ── Aggregate stats per barber ───────────────────────────────────
+  // ── Mapear a la forma que usa el render ─────────────────────────
   const barberStats = useMemo(() => {
-    if (!records?.length) return [];
-    const map = {};
-    records.forEach(rec => {
-      const id = rec.barber;
-      const name = rec.barber_name || `Barbero ${id}`;
-      if (!map[id]) {
-        map[id] = {
-          id, name,
-          revenue: 0,
-          services: 0,
-          avgRevenue: 0,
-          dailyRevenues: {},
-        };
-      }
-      const amount = safeN(rec.price_charged);
-      map[id].revenue += amount;
-      map[id].services += 1;
-      // Group by date for trend
-      const day = rec.service_datetime?.split('T')[0];
-      if (day) map[id].dailyRevenues[day] = (map[id].dailyRevenues[day] || 0) + amount;
-    });
-
-    return Object.values(map)
-      .map(b => ({
-        ...b,
-        avgRevenue: b.services > 0 ? b.revenue / b.services : 0,
-        specialty: barberList?.find(bl => bl.id === b.id)?.specialty || '',
-        photo_url: barberList?.find(bl => bl.id === b.id)?.photo_url || null,
-      }))
-      .sort((a, b) => b.revenue - a.revenue);
-  }, [records, barberList]);
+    if (!rawStats?.length) return [];
+    return rawStats.map(b => ({
+      id:         b.barber,
+      name:       b.barber_name,
+      specialty:  b.specialty || '',
+      photo_url:  b.photo_url || null,
+      revenue:    safeN(b.revenue),
+      services:   b.services,
+      avgRevenue: b.services > 0 ? safeN(b.revenue) / b.services : 0,
+    }));
+    // El backend ya devuelve ordenado por revenue desc
+  }, [rawStats]);
 
   // ── Chart data for main comparison bar chart ──────────────────
   const comparisonData = useMemo(() =>

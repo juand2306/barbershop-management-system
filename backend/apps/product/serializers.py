@@ -78,8 +78,16 @@ class ProductSaleSerializer(serializers.ModelSerializer):
         discount = data.get('discount_amount', Decimal('0'))
         total_price = max(Decimal('0'), (quantity * unit_price) - discount)
 
-        # Validación de stock disponible
+        # ── Validación de que el producto pertenece a la barbería ──────────
         product = data.get('product')
+        request = self.context.get('request')
+        if product and request and request.user.is_authenticated:
+            if product.barbershop_id != request.user.barbershop_id:
+                raise serializers.ValidationError({
+                    "product": "El producto no pertenece a esta barbería."
+                })
+
+        # Validación de stock disponible
         if product is not None and quantity is not None:
             if quantity > product.current_quantity:
                 raise serializers.ValidationError({

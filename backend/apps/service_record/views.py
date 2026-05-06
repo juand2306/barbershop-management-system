@@ -91,7 +91,8 @@ class ServiceRecordViewSet(viewsets.ModelViewSet):
                 'barber_name': s['barber__name'] or f"Barbero {s['barber']}",
                 'specialty':   s['barber__specialty'] or '',
                 'photo_url':   s['barber__photo_url'] or '',
-                'revenue':     float(s['total_revenue'] or 0),
+                # int(round()) evita artefactos de punto flotante en la conversión de Decimal
+                'revenue':     int(round(s['total_revenue'] or 0)),
                 'services':    s['total_services'],
             }
             for s in stats

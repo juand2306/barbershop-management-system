@@ -266,6 +266,7 @@ const CashRegister = () => {
   const [activeModal, setActiveModal] = useState(null); // 'service' | 'product' | 'expense' | 'advance' | 'pay_advance' | 'edit_report'
   const [cierreReport, setCierreReport] = useState(null);
   const [editNotes, setEditNotes] = useState('');
+  const [isExportingPDF, setIsExportingPDF] = useState(false);
   const [advancePayForm, setAdvancePayForm] = useState({ barber: '', advance: '', amount: '', payment_method: '', notes: '' });
 
   // ── Data queries ──────────────────────────────────────────────────
@@ -684,10 +685,18 @@ const CashRegister = () => {
             <div className="flex justify-end gap-3 pt-8 mt-4 border-t border-white/10 flex-wrap">
               {/* PDF Download — always available */}
               <button
-                onClick={() => exportReportPDF(cierreReport, shopName || 'Barbería')}
-                className="btn border border-purple-500/30 bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 shadow-[2px_2px_0px_rgba(0,0,0,0.5)] uppercase tracking-widest font-black py-3 px-6 text-sm flex items-center gap-2"
+                disabled={isExportingPDF}
+                onClick={async () => {
+                  if (isExportingPDF) return;
+                  setIsExportingPDF(true);
+                  try { await exportReportPDF(cierreReport, shopName || 'Barbería'); }
+                  finally { setIsExportingPDF(false); }
+                }}
+                className="btn border border-purple-500/30 bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 shadow-[2px_2px_0px_rgba(0,0,0,0.5)] uppercase tracking-widest font-black py-3 px-6 text-sm flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <FileDown className="w-4 h-4" /> Descargar PDF
+                {isExportingPDF
+                  ? <><div className="w-4 h-4 border-2 border-purple-400/30 border-t-purple-400 rounded-full animate-spin" /> Generando...</>
+                  : <><FileDown className="w-4 h-4" /> Descargar PDF</>}
               </button>
 
               {cierreReport.status !== 'confirmado' && (

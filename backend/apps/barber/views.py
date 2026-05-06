@@ -17,6 +17,7 @@ class BarberViewSet(viewsets.ModelViewSet):
     Permite listado, busquedas y filtrados.
     """
     serializer_class = BarberSerializer
+    pagination_class = None  # Barbería no tendrá cientos de barberos; retornar todos
     
     def get_permissions(self):
         """
@@ -109,9 +110,11 @@ class BarberViewSet(viewsets.ModelViewSet):
 class BarberDailyActiveViewSet(viewsets.ModelViewSet):
     """
     Gestion de ingresos y salidas diarias de barberos.
+    Solo Admin/Manager pueden crear y modificar registros de asistencia.
     """
     serializer_class = BarberDailyActiveSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    pagination_class = None
+    permission_classes = [IsAdminOrManager]
 
     def get_queryset(self):
         qs = BarberDailyActive.objects.select_related('barber').filter(

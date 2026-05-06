@@ -117,10 +117,7 @@ const Team = () => {
     onSuccess: () => {
       queryClient.invalidateQueries(['barbers']);
       toast.success('¡Barbero agregado al equipo!');
-      setIsAddModalOpen(false);
-      setFormData(emptyForm);
-      setCreatePhotoFile(null);
-      setCreatePhotoPreview(null);
+      closeAddModal();
     },
     onError: (err) => toast.error(extractApiError(err)),
   });
@@ -131,9 +128,7 @@ const Team = () => {
     onSuccess: () => {
       queryClient.invalidateQueries(['barbers']);
       toast.success('Barbero actualizado');
-      setIsEditModalOpen(false);
-      setEditTarget(null);
-      setEditPhotoPreview(null);
+      closeEditModal();
     },
     onError: (err) => toast.error(extractApiError(err)),
   });
@@ -186,10 +181,29 @@ const Team = () => {
 
   // ── Handlers ───────────────────────────────────────────────────────────────
 
+  // Revoca el object URL del modal de crear al cerrarlo (evita memory leak)
+  const closeAddModal = () => {
+    if (createPhotoPreview) URL.revokeObjectURL(createPhotoPreview);
+    setIsAddModalOpen(false);
+    setFormData(emptyForm);
+    setCreatePhotoFile(null);
+    setCreatePhotoPreview(null);
+  };
+
+  // Revoca el object URL del modal de editar al cerrarlo
+  const closeEditModal = () => {
+    if (editPhotoPreview) URL.revokeObjectURL(editPhotoPreview);
+    setIsEditModalOpen(false);
+    setEditTarget(null);
+    setEditPhotoPreview(null);
+  };
+
   // Foto en modal crear: solo guarda localmente (se sube junto al POST del barbero).
   const handleCreatePhotoChange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    // Revocar URL anterior si existía
+    if (createPhotoPreview) URL.revokeObjectURL(createPhotoPreview);
     setCreatePhotoFile(file);
     setCreatePhotoPreview(URL.createObjectURL(file));
     e.target.value = '';
@@ -199,6 +213,7 @@ const Team = () => {
   const handleEditPhotoChange = (e) => {
     const file = e.target.files[0];
     if (!file || !editTarget) return;
+    if (editPhotoPreview) URL.revokeObjectURL(editPhotoPreview);
     setEditPhotoPreview(URL.createObjectURL(file));
     uploadPhoto.mutate({ id: editTarget.id, file });
     e.target.value = '';
@@ -216,19 +231,6 @@ const Team = () => {
       active: barber.active,
     });
     setIsEditModalOpen(true);
-  };
-
-  const closeAddModal = () => {
-    setIsAddModalOpen(false);
-    setFormData(emptyForm);
-    setCreatePhotoFile(null);
-    setCreatePhotoPreview(null);
-  };
-
-  const closeEditModal = () => {
-    setIsEditModalOpen(false);
-    setEditTarget(null);
-    setEditPhotoPreview(null);
   };
 
   // ── Render ─────────────────────────────────────────────────────────────────
