@@ -12,7 +12,8 @@ class PaymentMethodViewSet(viewsets.ModelViewSet):
     Protegido: Solo Admin/Manager pueden CRUD.
     """
     serializer_class = PaymentMethodSerializer
-    
+    pagination_class = None  # Retornar todos los métodos de pago sin cortar
+
     def get_permissions(self):
         """
         GET list/retrieve: IsAuthenticated (todos ven los métodos de pago)

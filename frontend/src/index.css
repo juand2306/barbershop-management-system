@@ -287,6 +287,30 @@ select.input-glass option {
   background: rgba(201, 168, 76, 0.6);
 }
 
+/* ─── Top phantom scrollbar for calendar ───────────────────── */
+.calendar-top-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.calendar-top-scroll::-webkit-scrollbar {
+  height: 8px;
+}
+
+.calendar-top-scroll::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+}
+
+.calendar-top-scroll::-webkit-scrollbar-thumb {
+  background: rgba(201, 168, 76, 0.45);
+  border-radius: 8px;
+}
+
+.calendar-top-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(201, 168, 76, 0.75);
+}
+
 .event-block:hover {
   transform: scaleX(1.01) scaleY(1.01);
   filter: brightness(1.2);

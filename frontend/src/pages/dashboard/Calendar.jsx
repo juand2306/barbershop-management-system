@@ -498,18 +498,24 @@ const CalendarPage = () => {
   });
   const gridRef = useRef(null);
   const topScrollRef = useRef(null);
-  const innerScrollRef = useRef(null);
+  const isSyncingRef = useRef(false);
 
-  // Sync top phantom scrollbar → inner grid (horizontal)
+  // Sync top phantom scrollbar → outer grid (horizontal)
   const onTopScroll = () => {
-    if (innerScrollRef.current && topScrollRef.current) {
-      innerScrollRef.current.scrollLeft = topScrollRef.current.scrollLeft;
+    if (isSyncingRef.current) return;
+    if (gridRef.current && topScrollRef.current) {
+      isSyncingRef.current = true;
+      gridRef.current.scrollLeft = topScrollRef.current.scrollLeft;
+      isSyncingRef.current = false;
     }
   };
-  // Sync inner grid scroll → top phantom scrollbar (horizontal)
-  const onInnerScroll = () => {
-    if (topScrollRef.current && innerScrollRef.current) {
-      topScrollRef.current.scrollLeft = innerScrollRef.current.scrollLeft;
+  // Sync outer grid scroll → top phantom scrollbar (horizontal)
+  const onGridScroll = () => {
+    if (isSyncingRef.current) return;
+    if (topScrollRef.current && gridRef.current) {
+      isSyncingRef.current = true;
+      topScrollRef.current.scrollLeft = gridRef.current.scrollLeft;
+      isSyncingRef.current = false;
     }
   };
 
@@ -677,15 +683,15 @@ const CalendarPage = () => {
       <div
         ref={topScrollRef}
         onScroll={onTopScroll}
-        className="custom-scrollbar mb-1 flex-shrink-0"
-        style={{ overflowX: 'auto', overflowY: 'hidden', height: '12px' }}
+        className="calendar-top-scroll flex-shrink-0 mb-1"
+        style={{ height: '16px' }}
       >
         <div style={{ minWidth: `${TIME_COL_W + Math.max(barbers.length, 1) * 160}px`, height: '1px' }} />
       </div>
 
       {/* ── Calendar Grid ─────────────────────── */}
       <div
-        className="flex-1 rounded-lg overflow-hidden calendar-scroll"
+        className="flex-1 rounded-lg calendar-scroll"
         style={{
           minHeight: 0,
           background: 'linear-gradient(180deg, #15152a 0%, #0d0d12 40%, #080808 100%)',
@@ -693,6 +699,7 @@ const CalendarPage = () => {
           boxShadow: '0 0 60px rgba(168, 85, 247, 0.05) inset, 0 4px 0px rgba(0,0,0,0.8)',
         }}
         ref={gridRef}
+        onScroll={onGridScroll}
       >
         {loadingEvents ? (
           <div className="flex items-center justify-center h-64">
@@ -703,13 +710,10 @@ const CalendarPage = () => {
           </div>
         ) : (
           <div
-            ref={innerScrollRef}
-            onScroll={onInnerScroll}
             style={{
               display: 'grid',
               gridTemplateColumns: `${TIME_COL_W}px ${barbers.length > 0 ? `repeat(${barbers.length}, minmax(160px, 1fr))` : 'minmax(280px, 1fr)'}`,
               minWidth: `${TIME_COL_W + Math.max(barbers.length, 1) * 160}px`,
-              overflowX: 'auto',
             }}
             className="h-full"
           >

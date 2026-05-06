@@ -11,7 +11,8 @@ class ServiceViewSet(viewsets.ModelViewSet):
     Soft-delete: Servicios se marcan como inactive en lugar de eliminarse.
     """
     serializer_class = ServiceSerializer
-    
+    pagination_class = None  # Retornar todos los servicios; una barbería puede tener 20+
+
     def get_permissions(self):
         """
         Lectura: AllowAny (para portal público de reservas)
