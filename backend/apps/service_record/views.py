@@ -56,6 +56,46 @@ class ServiceRecordViewSet(viewsets.ModelViewSet):
              # Y si el pago esta pendiente? Eso ya queda en la logica de UI o status del record.
              instance.appointment.save(update_fields=['status'])
 
+    @action(detail=False, methods=['get'], url_path='resumen-por-barbero')
+    def resumen_por_barbero(self, request):
+        """
+        Totales (ingresos + servicios) agrupados por barbero para un rango de fechas.
+        Agrega en DB — sin paginación — para que BarberStats siempre muestre cifras correctas.
+        """
+        date_from = request.query_params.get('date_from')
+        date_to   = request.query_params.get('date_to')
+
+        qs = ServiceRecord.objects.filter(
+            barbershop=request.user.barbershop,
+            status='completado',
+        )
+        if date_from:
+            qs = qs.filter(service_datetime__date__gte=date_from)
+        if date_to:
+            qs = qs.filter(service_datetime__date__lte=date_to)
+
+        stats = (
+            qs
+            .values('barber', 'barber__name', 'barber__specialty', 'barber__photo_url')
+            .annotate(
+                total_revenue=Sum('price_charged'),
+                total_services=Count('id'),
+            )
+            .order_by('-total_revenue')
+        )
+
+        return Response([
+            {
+                'barber':      s['barber'],
+                'barber_name': s['barber__name'] or f"Barbero {s['barber']}",
+                'specialty':   s['barber__specialty'] or '',
+                'photo_url':   s['barber__photo_url'] or '',
+                'revenue':     float(s['total_revenue'] or 0),
+                'services':    s['total_services'],
+            }
+            for s in stats
+        ])
+
     @action(detail=False, methods=['get'], url_path='resumen-hoy')
     def resumen_hoy(self, request):
         """
