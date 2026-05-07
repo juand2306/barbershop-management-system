@@ -56,6 +56,7 @@ const Settings = () => {
     if (shopData && !shopForm) {
       setShopForm({
         name: shopData.name || '',
+        nit: shopData.nit || '',
         description: shopData.description || '',
         phone: shopData.phone || '',
         email: shopData.email || '',
@@ -555,6 +556,16 @@ const Settings = () => {
 
                   <div className="space-y-1"><label className="text-[10px] uppercase font-black text-gray-500 tracking-widest">Nombre</label>
                     <input className="input-glass" value={shopForm.name} onChange={e => setShopForm(f => ({ ...f, name: e.target.value }))} /></div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase font-black text-gray-500 tracking-widest">NIT</label>
+                    <input
+                      className="input-glass font-mono tracking-wider"
+                      value={shopForm.nit}
+                      onChange={e => setShopForm(f => ({ ...f, nit: e.target.value }))}
+                      placeholder="ej. 1033813589-6"
+                    />
+                    <p className="text-[10px] text-gray-600 font-bold">Aparece en los tickets de impresión</p>
+                  </div>
                   <div className="space-y-1"><label className="text-[10px] uppercase font-black text-gray-500 tracking-widest">Descripcion / Slogan</label>
                     <textarea rows={2} className="input-glass resize-none" value={shopForm.description} onChange={e => setShopForm(f => ({ ...f, description: e.target.value }))} /></div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
