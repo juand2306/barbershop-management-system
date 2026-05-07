@@ -4,7 +4,9 @@ import api from '../../api/axios';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { toast } from 'react-toastify';
-import { Calculator, DollarSign, Wallet, ArrowDown, ArrowUp, Scissors, Package, Receipt, LogOut, CreditCard, Edit3, FileDown, Plus, Trash2, SplitSquareHorizontal } from 'lucide-react';
+import { Calculator, DollarSign, Wallet, ArrowDown, ArrowUp, Scissors, Package, Receipt, LogOut, CreditCard, Edit3, FileDown, Plus, Trash2, SplitSquareHorizontal, Printer, CheckCircle } from 'lucide-react';
+import { printTicket } from '../../utils/printTicket';
+import { extractApiError, getLocalDateStr, safeN } from '../../utils/helpers';
 import Modal from '../../components/Modal';
 
 // ─── Mixed Payment UI Component ───────────────────────────────────────────────
@@ -97,22 +99,6 @@ const MixedPaymentSelector = ({ total, splits, onSplitsChange, paymentMethods })
     </div>
   );
 };
-
-// Helper to extract DRF error messages
-const extractApiError = (err) => {
-  const data = err.response?.data;
-  if (!data) return 'Error de conexión con el servidor';
-  if (typeof data === 'string') return data;
-  if (data.detail) return data.detail;
-  const firstKey = Object.keys(data)[0];
-  if (firstKey) {
-    const msg = data[firstKey];
-    return Array.isArray(msg) ? `${firstKey}: ${msg[0]}` : `${firstKey}: ${msg}`;
-  }
-  return 'Error desconocido al guardar';
-};
-
-const getLocalDateStr = () => new Intl.DateTimeFormat('en-CA').format(new Date());
 
 // ─── PDF Export ───────────────────────────────────────────────────────────────
 const exportReportPDF = async (report, shopName) => {
@@ -263,32 +249,35 @@ const CashRegister = () => {
   const queryClient = useQueryClient();
   const todayStr = getLocalDateStr();
 
-  const [activeModal, setActiveModal] = useState(null); // 'service' | 'product' | 'expense' | 'advance' | 'pay_advance' | 'edit_report'
+  // 'service' | 'product' | 'expense' | 'advance' | 'pay_advance' | 'edit_report' | 'print_ticket'
+  const [activeModal, setActiveModal] = useState(null);
+  const [lastCreatedService, setLastCreatedService] = useState(null);
   const [cierreReport, setCierreReport] = useState(null);
   const [editNotes, setEditNotes] = useState('');
   const [isExportingPDF, setIsExportingPDF] = useState(false);
   const [advancePayForm, setAdvancePayForm] = useState({ barber: '', advance: '', amount: '', payment_method: '', notes: '' });
 
   // ── Data queries ──────────────────────────────────────────────────
-  const { data: barbers } = useQuery(['barbers'], async () => { const r = await api.get('/barbers/'); return r.data.results || r.data; });
-  const { data: services } = useQuery(['services'], async () => { const r = await api.get('/services/'); return r.data.results || r.data; });
-  const { data: products } = useQuery(['products'], async () => { const r = await api.get('/products/'); return r.data.results || r.data; });
-  const { data: paymentMethods } = useQuery(['paymentMethods'], async () => { const r = await api.get('/payment-methods/'); return r.data.results || r.data; });
-  const { data: shopName } = useQuery(['shop-name-pdf'], async () => {
+  // Catálogos estáticos: staleTime de 5 min — cambian raramente y no necesitan refetch en cada render
+  const { data: barbers } = useQuery(['barbers'], async () => { const r = await api.get('/barbers/'); return r.data.results || r.data; }, { staleTime: 300_000 });
+  const { data: services } = useQuery(['services'], async () => { const r = await api.get('/services/'); return r.data.results || r.data; }, { staleTime: 300_000 });
+  const { data: products } = useQuery(['products'], async () => { const r = await api.get('/products/'); return r.data.results || r.data; }, { staleTime: 120_000 });
+  const { data: paymentMethods } = useQuery(['paymentMethods'], async () => { const r = await api.get('/payment-methods/'); return r.data.results || r.data; }, { staleTime: 300_000 });
+  const { data: shopInfo } = useQuery(['shop-info'], async () => {
     const r = await api.get('/barbershop/');
-    const d = r.data?.results?.[0] || (Array.isArray(r.data) ? r.data[0] : r.data);
-    return d?.name || 'Barbería';
+    return r.data?.results?.[0] || (Array.isArray(r.data) ? r.data[0] : r.data) || {};
   }, { staleTime: 300000 });
+  const shopName = shopInfo?.name || 'Barbería';
 
-  // When a barber is selected in pay_advance modal, load their pending advances
+  // Vales pendientes del barbero seleccionado — una sola request, filtramos pagado/cancelado
   const { data: pendingAdvances } = useQuery(
     ['pending-advances', advancePayForm.barber],
     async () => {
-      const r = await api.get(`/advances/?barber=${advancePayForm.barber}&status=pendiente`);
-      const r2 = await api.get(`/advances/?barber=${advancePayForm.barber}&status=parcialmente_pagado`);
-      return [...(r.data.results || r.data), ...(r2.data.results || r2.data)];
+      const r = await api.get(`/advances/?barber=${advancePayForm.barber}`);
+      const all = r.data.results || r.data;
+      return all.filter(a => a.status !== 'pagado' && a.status !== 'cancelado');
     },
-    { enabled: !!advancePayForm.barber, staleTime: 10000 }
+    { enabled: !!advancePayForm.barber, staleTime: 10_000 }
   );
 
   // ── Form states ───────────────────────────────────────────────────
@@ -328,13 +317,13 @@ const CashRegister = () => {
   // ── Mutations ─────────────────────────────────────────────────────
   const createService = useMutation({
     mutationFn: (data) => api.post('/service-records/', data),
-    onSuccess: () => {
+    onSuccess: (response) => {
       queryClient.invalidateQueries(['todaySummary']);
-      toast.success('✅ Servicio cobrado exitosamente');
-      setActiveModal(null);
+      setLastCreatedService(response.data);
       setServiceForm({ barber: '', service: '', price_charged: '', payment_method: '', client_name: '' });
       setServiceMixed(false);
       setServiceSplits([{ payment_method: '', amount: '' }, { payment_method: '', amount: '' }]);
+      setActiveModal('print_ticket');
     },
     onError: (err) => toast.error(extractApiError(err))
   });
@@ -535,7 +524,7 @@ const CashRegister = () => {
     { value: 'otro', label: 'Otro' },
   ];
 
-  const safeInt = (v) => { const n = parseInt(v); return isNaN(n) ? 0 : n; };
+  const safeInt = safeN;
 
   return (
     <div className="animate-slide-up space-y-8 pb-10">
@@ -1047,6 +1036,75 @@ const CashRegister = () => {
             {payAdvance.isLoading ? 'REGISTRANDO...' : 'REGISTRAR PAGO DE VALE'}
           </button>
         </form>
+      </Modal>
+
+      {/* 7. Ticket de impresión — aparece tras registrar un servicio */}
+      <Modal
+        isOpen={activeModal === 'print_ticket'}
+        onClose={() => { setActiveModal(null); setLastCreatedService(null); toast.success('✅ Servicio registrado'); }}
+        title="Servicio Registrado"
+      >
+        {lastCreatedService && (
+          <div className="space-y-6">
+            {/* Resumen del servicio registrado */}
+            <div className="p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-sm space-y-3">
+              <div className="flex items-center gap-2 text-emerald-400">
+                <CheckCircle className="w-5 h-5 flex-shrink-0" />
+                <span className="text-sm font-black uppercase tracking-widest">Cobro guardado exitosamente</span>
+              </div>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm pt-1">
+                <span className="text-gray-500 font-bold uppercase tracking-wider text-xs">Barbero</span>
+                <span className="text-white font-bold">{lastCreatedService.barber_name || '—'}</span>
+                <span className="text-gray-500 font-bold uppercase tracking-wider text-xs">Servicio</span>
+                <span className="text-white font-bold">{lastCreatedService.service_name || '—'}</span>
+                {lastCreatedService.client_name && (
+                  <>
+                    <span className="text-gray-500 font-bold uppercase tracking-wider text-xs">Cliente</span>
+                    <span className="text-white font-bold">{lastCreatedService.client_name}</span>
+                  </>
+                )}
+                <span className="text-gray-500 font-bold uppercase tracking-wider text-xs">Precio</span>
+                <span className="text-emerald-400 font-black font-mono">
+                  ${parseInt(lastCreatedService.price_charged || 0).toLocaleString('es-CO')}
+                </span>
+                <span className="text-gray-500 font-bold uppercase tracking-wider text-xs">Pago</span>
+                <span className="text-white font-bold">
+                  {lastCreatedService.payment_display || lastCreatedService.payment_method_name || '—'}
+                </span>
+              </div>
+            </div>
+
+            {/* Botón principal: imprimir ticket (un solo clic) */}
+            <button
+              onClick={() => printTicket({ shop: shopInfo || {}, record: lastCreatedService })}
+              className="w-full flex items-center justify-center gap-3 py-5 bg-purple-600 hover:bg-purple-500 text-white font-black uppercase tracking-widest shadow-[4px_4px_0px_rgba(0,0,0,1)] transition-all hover:shadow-[6px_6px_0px_rgba(0,0,0,0.7)] active:shadow-none active:translate-x-1 active:translate-y-1"
+            >
+              <Printer className="w-6 h-6" />
+              IMPRIMIR TICKET
+            </button>
+
+            {/* Acciones secundarias */}
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setActiveModal(null);
+                  setLastCreatedService(null);
+                  // Pequeño delay para que el modal cierre antes de abrir el siguiente
+                  setTimeout(() => setActiveModal('service'), 100);
+                }}
+                className="flex-1 btn border border-white/20 text-gray-300 hover:bg-white/5 font-black uppercase tracking-widest py-3 text-sm"
+              >
+                + Registrar otro
+              </button>
+              <button
+                onClick={() => { setActiveModal(null); setLastCreatedService(null); toast.success('✅ Servicio registrado'); }}
+                className="flex-1 btn border border-white/10 text-gray-500 hover:text-gray-300 hover:bg-white/5 font-black uppercase tracking-widest py-3 text-sm"
+              >
+                Listo
+              </button>
+            </div>
+          </div>
+        )}
       </Modal>
 
       {/* 6. Editar Arqueo */}

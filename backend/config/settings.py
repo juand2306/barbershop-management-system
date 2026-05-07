@@ -54,6 +54,7 @@ INSTALLED_APPS = [
     'django_celery_beat',
 
     # Apps locales
+    'apps.core',
     'apps.barbershop',
     'apps.barber',
     'apps.service',
@@ -199,9 +200,13 @@ REST_FRAMEWORK = {
 }
 
 # JWT
+# ACCESS_TOKEN_LIFETIME: 12 horas — la cajera no tiene que volver a iniciar sesión
+# durante todo un turno de trabajo.
+# REFRESH_TOKEN_LIFETIME: 30 días — si el token de acceso expira, el frontend lo
+# renueva automáticamente en segundo plano sin interrumpir al usuario.
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+    'ACCESS_TOKEN_LIFETIME': timedelta(hours=12),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=30),
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
     'ALGORITHM': 'HS256',

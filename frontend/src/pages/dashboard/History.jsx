@@ -5,12 +5,13 @@ import {
   History, Filter, Scissors, DollarSign, TrendingDown,
   CreditCard, Package, ChevronDown, ChevronUp,
   Search, ArrowUpRight, ArrowDownRight,
-  FileText, User, Clock, BarChart2, X
+  FileText, User, Clock, BarChart2, X, Printer
 } from 'lucide-react';
 import { fmt } from '../../utils/helpers';
 import StatusBadge from '../../components/StatusBadge';
 import { format, parseISO, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { printTicket } from '../../utils/printTicket';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 const fmtDate = (str) => {
@@ -314,7 +315,7 @@ const CierresTab = ({ filters, onFilterChange, barbers, paymentMethods }) => {
 };
 
 // ─── Tab: Servicios ──────────────────────────────────────────────────────────
-const ServiciosTab = ({ filters, onFilterChange, barbers, paymentMethods }) => {
+const ServiciosTab = ({ filters, onFilterChange, barbers, paymentMethods, shopInfo }) => {
   const params = new URLSearchParams();
   if (filters.date_from) params.set('date_from', filters.date_from);
   if (filters.date_to) params.set('date_to', filters.date_to);
@@ -371,6 +372,7 @@ const ServiciosTab = ({ filters, onFilterChange, barbers, paymentMethods }) => {
             <Th>Método pago</Th>
             <Th>Estado</Th>
             <Th right>Cobrado</Th>
+            <Th>Ticket</Th>
           </tr>
         </thead>
         <tbody>
@@ -382,9 +384,18 @@ const ServiciosTab = ({ filters, onFilterChange, barbers, paymentMethods }) => {
               </Td>
               <Td>{r.service_name}</Td>
               <Td>{r.barber_name}</Td>
-              <Td>{r.payment_method_name || '—'}</Td>
+              <Td>{r.payment_display || r.payment_method_name || '—'}</Td>
               <Td><StatusBadge status={r.status} /></Td>
               <Td right><span className="font-black font-mono text-cyan-400">{fmt(r.price_charged)}</span></Td>
+              <Td>
+                <button
+                  onClick={() => printTicket({ shop: shopInfo || {}, record: r })}
+                  title="Imprimir ticket"
+                  className="p-1.5 text-gray-500 hover:text-purple-400 hover:bg-purple-500/10 rounded transition-colors"
+                >
+                  <Printer className="w-4 h-4" />
+                </button>
+              </Td>
             </tr>
           ))}
         </tbody>
@@ -657,10 +668,15 @@ const HistoryPage = () => {
     return res.data.results || res.data;
   }, { staleTime: 120000 });
 
+  const { data: shopInfo } = useQuery(['shop-info'], async () => {
+    const r = await api.get('/barbershop/');
+    return r.data?.results?.[0] || (Array.isArray(r.data) ? r.data[0] : r.data) || {};
+  }, { staleTime: 300000 });
+
   const currentTab = TABS.find(t => t.id === activeTab);
   const tabColor = TAB_COLORS[currentTab?.color] || TAB_COLORS.purple;
 
-  const tabProps = { filters, onFilterChange: setFilters, barbers, paymentMethods };
+  const tabProps = { filters, onFilterChange: setFilters, barbers, paymentMethods, shopInfo };
 
   return (
     <div className="animate-slide-up space-y-6">

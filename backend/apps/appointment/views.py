@@ -8,6 +8,15 @@ import datetime
 from django.utils import timezone
 
 
+def _day_range(target_date):
+    """Rango Bogotá-aware para un date: (00:00:00, 23:59:59.999999)."""
+    tz = timezone.get_current_timezone()
+    return (
+        timezone.make_aware(datetime.datetime.combine(target_date, datetime.time.min), tz),
+        timezone.make_aware(datetime.datetime.combine(target_date, datetime.time.max), tz),
+    )
+
+
 class AppointmentViewSet(viewsets.ModelViewSet):
     """
     CRUD completo para el manejo y recepcion de citas en la barberia.
@@ -50,12 +59,30 @@ class AppointmentViewSet(viewsets.ModelViewSet):
             qs = qs.filter(status=status_filter)
         if barber:
             qs = qs.filter(barber_id=barber)
+
+        # Usar rangos explícitos con timezone para appointment_datetime (DateTimeField)
         if date:
-            qs = qs.filter(appointment_datetime__date=date)
-        if date_from:
-            qs = qs.filter(appointment_datetime__date__gte=date_from)
-        if date_to:
-            qs = qs.filter(appointment_datetime__date__lte=date_to)
+            try:
+                d = datetime.datetime.strptime(date, '%Y-%m-%d').date()
+                ds, de = _day_range(d)
+                qs = qs.filter(appointment_datetime__gte=ds, appointment_datetime__lte=de)
+            except ValueError:
+                pass
+        else:
+            if date_from:
+                try:
+                    qs = qs.filter(appointment_datetime__gte=_day_range(
+                        datetime.datetime.strptime(date_from, '%Y-%m-%d').date()
+                    )[0])
+                except ValueError:
+                    pass
+            if date_to:
+                try:
+                    qs = qs.filter(appointment_datetime__lte=_day_range(
+                        datetime.datetime.strptime(date_to, '%Y-%m-%d').date()
+                    )[1])
+                except ValueError:
+                    pass
 
         return qs.order_by('appointment_datetime')
 
@@ -115,13 +142,17 @@ class AppointmentViewSet(viewsets.ModelViewSet):
 
         events = []
 
+        # Rangos timezone-aware para cubrir el período completo (from 00:00 to 23:59)
+        range_start = _day_range(date_from)[0]
+        range_end   = _day_range(date_to)[1]
+
         # --- 1. CITAS AGENDADAS (appointments) ---
         appointments_qs = Appointment.objects.select_related('barber', 'service').filter(
             barbershop=barbershop,
-            appointment_datetime__date__gte=date_from,
-            appointment_datetime__date__lte=date_to,
+            appointment_datetime__gte=range_start,
+            appointment_datetime__lte=range_end,
         ).exclude(status__in=['cancelada', 'no_asistio'])
-        
+
         if barber_id:
             appointments_qs = appointments_qs.filter(barber_id=barber_id)
 
@@ -148,8 +179,8 @@ class AppointmentViewSet(viewsets.ModelViewSet):
         # --- 2. SERVICIOS COMPLETADOS (walk-ins y atendidos ya) ---
         records_qs = ServiceRecord.objects.select_related('barber', 'service').filter(
             barbershop=barbershop,
-            service_datetime__date__gte=date_from,
-            service_datetime__date__lte=date_to,
+            service_datetime__gte=range_start,
+            service_datetime__lte=range_end,
             status='completado',
         )
 

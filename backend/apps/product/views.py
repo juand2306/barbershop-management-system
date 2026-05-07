@@ -108,9 +108,9 @@ class ProductSaleViewSet(viewsets.ModelViewSet):
     pagination_class = None  # Retornar todas las ventas del rango sin cortar
 
     def get_queryset(self):
-        qs = ProductSale.objects.select_related('product', 'barber', 'payment_method').filter(
-            barbershop=self.request.user.barbershop
-        )
+        qs = ProductSale.objects.select_related('product', 'barber', 'payment_method').prefetch_related(
+            'payment_splits__payment_method'
+        ).filter(barbershop=self.request.user.barbershop)
         
         # Filtros
         date = self.request.query_params.get('date')

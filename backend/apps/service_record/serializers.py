@@ -25,18 +25,29 @@ class ServiceRecordSerializer(serializers.ModelSerializer):
     barber_name = serializers.CharField(source='barber.name', read_only=True)
     service_name = serializers.CharField(source='service.name', read_only=True)
     payment_method_name = serializers.CharField(source='payment_method.name', read_only=True)
+    payment_display = serializers.SerializerMethodField()
     payment_splits_detail = ServiceRecordPaymentSplitSerializer(
         source='payment_splits', many=True, read_only=True
     )
     # Campo write-only para recibir los splits desde el frontend
     payment_splits = PaymentSplitInputSerializer(many=True, required=False, write_only=True)
 
+    def get_payment_display(self, obj):
+        if obj.is_mixed_payment:
+            names = [
+                split.payment_method.name
+                for split in obj.payment_splits.all()
+                if split.payment_method
+            ]
+            return ' / '.join(names) if names else 'Mixto'
+        return obj.payment_method.name if obj.payment_method else '—'
+
     class Meta:
         model = ServiceRecord
         fields = (
             'id', 'barbershop', 'barber', 'barber_name', 'service', 'service_name',
             'appointment', 'price_charged', 'payment_method', 'payment_method_name',
-            'is_mixed_payment', 'payment_splits', 'payment_splits_detail',
+            'payment_display', 'is_mixed_payment', 'payment_splits', 'payment_splits_detail',
             'client_name', 'service_datetime', 'status', 'notes',
             'created_at', 'updated_at'
         )

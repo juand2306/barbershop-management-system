@@ -5,6 +5,14 @@ from django.utils.timezone import localtime
 import datetime
 
 
+def _day_range(target_date):
+    tz = timezone.get_current_timezone()
+    return (
+        timezone.make_aware(datetime.datetime.combine(target_date, datetime.time.min), tz),
+        timezone.make_aware(datetime.datetime.combine(target_date, datetime.time.max), tz),
+    )
+
+
 class AppointmentSerializer(serializers.ModelSerializer):
     barber_name = serializers.CharField(source='barber.name', read_only=True)
     service_name = serializers.CharField(source='service.name', read_only=True)
@@ -85,13 +93,17 @@ class AppointmentSerializer(serializers.ModelSerializer):
                 new_start = appointment_datetime
                 new_end = new_start + datetime.timedelta(minutes=duration)
 
+                # Usar rango timezone-aware del día en vez de __date (evita bug de timezone)
+                day_start, day_end = _day_range(localtime(appointment_datetime).date())
+
                 existing_qs = (
                     Appointment.objects
                     .filter(
                         barber=barber,
                         status__in=['pendiente', 'confirmada'],
                         service__isnull=False,
-                        appointment_datetime__date=appointment_datetime.date(),
+                        appointment_datetime__gte=day_start,
+                        appointment_datetime__lte=day_end,
                     )
                     .select_related('service')
                 )

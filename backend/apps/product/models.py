@@ -1,5 +1,6 @@
 from django.utils import timezone
 from django.db import models
+from django.db.models import F
 from django.core.validators import MinValueValidator
 
 
@@ -132,23 +133,33 @@ class ProductSale(models.Model):
 
         super().save(*args, **kwargs)
 
-        # Descontar del inventario SOLO en creacion
+        # Descontar del inventario SOLO en creacion — update atómico con F() para
+        # evitar race conditions bajo escrituras concurrentes.
         if is_new and self.product:
-            self.product.current_quantity -= self.quantity
-            # Evitar stock negativo (puede quedar en 0 pero no menor)
-            if self.product.current_quantity < 0:
-                self.product.current_quantity = 0
-            self.product.save(update_fields=['current_quantity'])
+            Product.objects.filter(pk=self.product.pk).update(
+                current_quantity=models.Case(
+                    models.When(
+                        current_quantity__gte=self.quantity,
+                        then=F('current_quantity') - self.quantity
+                    ),
+                    default=models.Value(0),
+                    output_field=models.IntegerField(),
+                )
+            )
+            self.product.refresh_from_db(fields=['current_quantity'])
 
     def delete(self, *args, **kwargs):
         """
         Si se elimina (anula) una venta, el inventario regresa al producto.
+        Update atómico con F() para evitar race conditions.
         """
-        if self.product:
-            self.product.current_quantity += self.quantity
-            self.product.save(update_fields=['current_quantity'])
-            
+        product_pk = self.product_id
+        quantity = self.quantity
         super().delete(*args, **kwargs)
+        if product_pk:
+            Product.objects.filter(pk=product_pk).update(
+                current_quantity=F('current_quantity') + quantity
+            )
 
     def __str__(self):
         product_name = self.product.name if self.product else 'Producto eliminado'

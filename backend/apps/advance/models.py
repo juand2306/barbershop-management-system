@@ -1,4 +1,4 @@
-from django.db import models
+from django.db import models, transaction
 from django.core.validators import MinValueValidator
 from django.utils import timezone
 
@@ -167,26 +167,32 @@ class AdvancePayment(models.Model):
         verbose_name = 'Pago de Vale'
         verbose_name_plural = 'Pagos de Vales'
         ordering = ['-payment_date', '-created_at']
+        indexes = [
+            models.Index(fields=['barbershop', 'payment_date'], name='advpay_shop_date_idx'),
+            models.Index(fields=['barbershop', 'barber'], name='advpay_shop_barber_idx'),
+        ]
 
     def __str__(self):
         return f"Pago vale {self.barber.name} | ${self.amount:,.0f} | {self.payment_date}"
 
     def save(self, *args, **kwargs):
         """Al guardar, actualizar el monto pagado y estado del vale padre."""
-        super().save(*args, **kwargs)
-        advance = self.advance
-        total_paid = advance.payments.aggregate(
-            total=models.Sum('amount')
-        )['total'] or 0
-        advance.amount_paid = total_paid
-        advance.update_status()
+        with transaction.atomic():
+            super().save(*args, **kwargs)
+            advance = Advance.objects.select_for_update().get(pk=self.advance_id)
+            total_paid = advance.payments.aggregate(
+                total=models.Sum('amount')
+            )['total'] or 0
+            advance.amount_paid = total_paid
+            advance.update_status()
 
     def delete(self, *args, **kwargs):
         """Al eliminar, actualizar el monto pagado y estado del vale padre."""
-        advance = self.advance
-        super().delete(*args, **kwargs)
-        total_paid = advance.payments.aggregate(
-            total=models.Sum('amount')
-        )['total'] or 0
-        advance.amount_paid = total_paid
-        advance.update_status()
+        with transaction.atomic():
+            advance = Advance.objects.select_for_update().get(pk=self.advance_id)
+            super().delete(*args, **kwargs)
+            total_paid = advance.payments.aggregate(
+                total=models.Sum('amount')
+            )['total'] or 0
+            advance.amount_paid = total_paid
+            advance.update_status()

@@ -3,6 +3,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.db import transaction, models
 from django.db.models import Sum, F, ExpressionWrapper, DecimalField, Prefetch
+from django.utils import timezone
 
 from .models import DailyReport, DailyReportPaymentBreakdown, BarberDailyCommission
 from .serializers import DailyReportSerializer
@@ -15,6 +16,23 @@ from apps.payment_method.models import PaymentMethod
 from apps.barber.models import Barber
 
 import datetime
+
+
+def _day_range(target_date):
+    """
+    Devuelve (day_start, day_end) como datetimes con zona horaria (America/Bogotá),
+    cubriendo el día completo de 00:00:00 a 23:59:59.999999.
+    Usar rangos explícitos es más robusto que __date cuando USE_TZ=True,
+    especialmente en SQLite donde la conversión de zona horaria no es nativa.
+    """
+    tz = timezone.get_current_timezone()
+    day_start = timezone.make_aware(
+        datetime.datetime.combine(target_date, datetime.time.min), tz
+    )
+    day_end = timezone.make_aware(
+        datetime.datetime.combine(target_date, datetime.time.max), tz
+    )
+    return day_start, day_end
 
 
 class DailyReportViewSet(viewsets.ModelViewSet):
@@ -105,13 +123,21 @@ class DailyReportViewSet(viewsets.ModelViewSet):
             report.barber_commissions.all().delete()
 
             # 2. Consultar todos los ingresos / egresos del dia
-            
+            # Usamos rangos explícitos en zona horaria Bogotá (00:00:00 – 23:59:59)
+            # para garantizar que se toma el día COMPLETO independientemente del motor
+            # de base de datos (SQLite en dev no soporta __date con timezone).
+            day_start, day_end = _day_range(target_date)
+
             # --- INGRESOS ---
             services = ServiceRecord.objects.filter(
-                barbershop=barbershop, service_datetime__date=target_date, status='completado'
+                barbershop=barbershop,
+                service_datetime__gte=day_start,
+                service_datetime__lte=day_end,
+                status='completado'
             )
             total_services = services.aggregate(Sum('price_charged'))['price_charged__sum'] or 0
-            
+
+            # sale_date, expense_date y payment_date son DateField — sin timezone issues
             product_sales = ProductSale.objects.filter(
                 barbershop=barbershop, sale_date=target_date
             )
@@ -128,8 +154,11 @@ class DailyReportViewSet(viewsets.ModelViewSet):
             )
             total_expenses = expenses.aggregate(Sum('amount'))['amount__sum'] or 0
 
+            # created_at es DateTimeField — usar rango explícito
             advances = Advance.objects.filter(
-                barbershop=barbershop, created_at__date=target_date
+                barbershop=barbershop,
+                created_at__gte=day_start,
+                created_at__lte=day_end,
             )
             total_advances = advances.aggregate(Sum('amount'))['amount__sum'] or 0
 

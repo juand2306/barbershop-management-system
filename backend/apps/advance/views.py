@@ -1,9 +1,19 @@
+import datetime
 from decimal import Decimal
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from django.utils import timezone
 from .models import Advance, AdvancePayment
 from .serializers import AdvanceSerializer, AdvancePaymentSerializer
+
+
+def _day_range(target_date):
+    tz = timezone.get_current_timezone()
+    return (
+        timezone.make_aware(datetime.datetime.combine(target_date, datetime.time.min), tz),
+        timezone.make_aware(datetime.datetime.combine(target_date, datetime.time.max), tz),
+    )
 
 
 class AdvanceViewSet(viewsets.ModelViewSet):
@@ -30,10 +40,21 @@ class AdvanceViewSet(viewsets.ModelViewSet):
             qs = qs.filter(barber_id=barber_id)
         if status_filter:
             qs = qs.filter(status=status_filter)
+        # created_at es DateTimeField: usar rangos timezone-aware en vez de __date
         if date_from:
-            qs = qs.filter(created_at__date__gte=date_from)
+            try:
+                qs = qs.filter(created_at__gte=_day_range(
+                    datetime.datetime.strptime(date_from, '%Y-%m-%d').date()
+                )[0])
+            except ValueError:
+                pass
         if date_to:
-            qs = qs.filter(created_at__date__lte=date_to)
+            try:
+                qs = qs.filter(created_at__lte=_day_range(
+                    datetime.datetime.strptime(date_to, '%Y-%m-%d').date()
+                )[1])
+            except ValueError:
+                pass
 
         return qs
 

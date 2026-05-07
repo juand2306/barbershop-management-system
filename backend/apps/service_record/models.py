@@ -89,6 +89,7 @@ class ServiceRecord(models.Model):
         indexes = [
             models.Index(fields=['barbershop', 'service_datetime']),
             models.Index(fields=['barber', 'service_datetime']),
+            models.Index(fields=['barbershop', 'status'], name='sr_shop_status_idx'),
         ]
 
     def __str__(self):

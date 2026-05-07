@@ -25,7 +25,7 @@ class ExpenseViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = Expense.objects.select_related(
-            'barbershop', 'payment_method', 'registered_by'
+            'payment_method', 'registered_by'
         ).filter(barbershop=self.request.user.barbershop)
 
         # Filtros opcionales via query params

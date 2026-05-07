@@ -51,6 +51,7 @@ class Appointment(models.Model):
         indexes = [
             models.Index(fields=['barbershop', 'appointment_datetime']),
             models.Index(fields=['barber', 'appointment_datetime']),
+            models.Index(fields=['barbershop', 'status'], name='appt_shop_status_idx'),
         ]
     
     def __str__(self):

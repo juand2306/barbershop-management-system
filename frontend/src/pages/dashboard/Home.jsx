@@ -95,13 +95,11 @@ const HomeDashboard = () => {
       .catch(() => [])
   );
 
-  // Low stock products
+  // Low stock products — dedicated endpoint, filtered in DB (evita traer todo el catálogo)
   const { data: lowStockProducts } = useQuery(
     ['low-stock'],
-    () => api.get('/products/').then(r => {
-      const all = r.data.results || r.data;
-      return all.filter(p => p.current_quantity <= p.minimum_quantity && p.active);
-    })
+    () => api.get('/products/stock-bajo/').then(r => r.data.results || r.data),
+    { staleTime: 60_000 }
   );
 
   // Today's appointments
