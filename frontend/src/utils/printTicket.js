@@ -136,7 +136,7 @@ const buildTicketHtml = ({ shop = {}, record }) => {
   const serviceName = escHtml((record.service_name || 'Servicio').toUpperCase());
   const clientName = record.client_name ? escHtml(record.client_name.toUpperCase()) : null;
   const shopName = escHtml(shop.name || 'BARBERÍA');
-  const shopNit = escHtml(shop.nit || '');
+  const shopNit = escHtml(shop.nit || '1033813589-6');
   const shopPhone = escHtml(shop.phone || '');
 
   // La dirección puede tener saltos de línea; generamos un <div> por línea.
