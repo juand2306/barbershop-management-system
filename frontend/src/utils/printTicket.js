@@ -178,12 +178,14 @@ const buildTicketHtml = ({ shop = {}, record }) => {
       color: #000;
       width: 74mm; /* 80mm - 6mm márgenes */
       background: #fff;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
     }
 
     /* ── Encabezado de la tienda ────────────────────────────────────── */
     .header {
       text-align: center;
-      margin-bottom: 2mm;
+      margin-bottom: 3mm;
     }
 
     .shop-name {
