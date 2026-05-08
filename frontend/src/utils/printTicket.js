@@ -159,31 +159,35 @@ const buildTicketHtml = ({ shop = {}, record }) => {
     /* ── Página: papel térmico 80mm, alto automático ─────────────────── */
     @page {
       size: 80mm auto;
-      margin: 3mm 4mm;
+      margin: 4mm 5mm;
     }
 
     * {
       margin: 0;
       padding: 0;
       box-sizing: border-box;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
     }
 
     body {
       font-family: 'Courier New', Courier, monospace;
-      font-size: 9.5pt;
+      font-size: 12pt;
       color: #000;
-      width: 72mm; /* 80mm - 8mm márgenes */
+      width: 70mm;
       background: #fff;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
     }
 
     /* ── Encabezado de la tienda ────────────────────────────────────── */
     .header {
       text-align: center;
-      margin-bottom: 2mm;
+      margin-bottom: 3mm;
     }
 
     .shop-name {
-      font-size: 15pt;
+      font-size: 18pt;
       font-weight: bold;
       letter-spacing: 1px;
       text-transform: uppercase;
@@ -191,22 +195,22 @@ const buildTicketHtml = ({ shop = {}, record }) => {
     }
 
     .shop-subtitle {
-      font-size: 11pt;
+      font-size: 13pt;
       font-weight: bold;
       text-transform: uppercase;
     }
 
     .shop-meta {
-      font-size: 8.5pt;
-      margin-top: 0.8mm;
-      line-height: 1.4;
+      font-size: 10pt;
+      margin-top: 1mm;
+      line-height: 1.5;
     }
 
     /* ── Separador ──────────────────────────────────────────────────── */
     .divider {
       border: none;
-      border-top: 1px dashed #000;
-      margin: 2.5mm 0;
+      border-top: 1.5px dashed #000;
+      margin: 3mm 0;
     }
 
     /* ── Tabla de datos ─────────────────────────────────────────────── */
@@ -217,15 +221,15 @@ const buildTicketHtml = ({ shop = {}, record }) => {
 
     td {
       vertical-align: top;
-      padding: 0.8mm 0;
-      line-height: 1.4;
+      padding: 1mm 0;
+      line-height: 1.5;
     }
 
     td.label {
       font-weight: bold;
       white-space: nowrap;
       padding-right: 2mm;
-      width: 22mm;
+      width: 24mm;
     }
 
     td.value {
@@ -235,16 +239,16 @@ const buildTicketHtml = ({ shop = {}, record }) => {
 
     /* ── Fila de precio destacada ───────────────────────────────────── */
     .price-row td {
-      font-size: 11.5pt;
+      font-size: 14pt;
       font-weight: bold;
-      padding-top: 1mm;
+      padding-top: 1.5mm;
     }
 
     /* ── Pie de página ──────────────────────────────────────────────── */
     .footer {
       text-align: center;
-      font-size: 8pt;
-      margin-top: 3mm;
+      font-size: 11pt;
+      margin-top: 4mm;
     }
   </style>
 </head>
