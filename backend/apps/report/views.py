@@ -175,12 +175,15 @@ class DailyReportViewSet(viewsets.ModelViewSet):
                 for row in services.values('barber_id').annotate(total=Sum('price_charged'))
             }
 
-            # Pre-agregar vales pendientes por barbero en una sola query (evita N+1)
+            # Pre-agregar vales del DÍA por barbero (solo los creados en target_date).
+            # Cada día empieza en 0: los vales de días anteriores no se arrastran al cierre de hoy.
             pending_advances_by_barber = {
                 row['barber_id']: row['pending'] or 0
                 for row in Advance.objects.filter(
-                    barbershop=barbershop
-                ).exclude(status='pagado').values('barber_id').annotate(
+                    barbershop=barbershop,
+                    created_at__gte=day_start,
+                    created_at__lte=day_end,
+                ).exclude(status='cancelado').values('barber_id').annotate(
                     pending=Sum(
                         ExpressionWrapper(
                             F('amount') - F('amount_paid'),
@@ -192,10 +195,12 @@ class DailyReportViewSet(viewsets.ModelViewSet):
 
             for barber in active_barbers:
                 s_total = services_by_barber.get(barber.id, 0) or 0
+                p_advances = pending_advances_by_barber.get(barber.id, 0)
 
-                if s_total > 0:
+                # Incluir al barbero si trabajó hoy O si recibió un adelanto hoy
+                # (adelanto sin servicios significa que el barbero tomó más de lo que generó)
+                if s_total > 0 or p_advances > 0:
                      c_amount = s_total * (barber.commission_percentage / 100)
-                     p_advances = pending_advances_by_barber.get(barber.id, 0)
 
                      barber_commissions_list.append(BarberDailyCommission(
                           barbershop=barbershop,

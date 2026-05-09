@@ -135,7 +135,7 @@ const exportReportPDF = async (report, shopName) => {
     ['Total Productos', fmtM(report.total_products_amount)],
     ['Ingresos Brutos', fmtM((Number(report.total_services_amount)||0) + (Number(report.total_products_amount)||0))],
     ['Total Gastos',    fmtM(report.total_expenses)],
-    ['Vales Entregados', fmtM(report.total_advances)],
+    ['Vales Entregados', fmtM(report.total_advances_given)],
     ['Pagos de Vales',  fmtM(report.total_advance_payments)],
     ['Comisiones Barberos', fmtM(report.barber_commission_total)],
     ['GANANCIA NETA BARBERIA', fmtM(report.barbershop_profit)],
@@ -171,14 +171,20 @@ const exportReportPDF = async (report, shopName) => {
     y += 3;
     autoTable(doc, {
       startY: y + 4,
-      head: [['Barbero', '% Com.', 'Generado', 'Vales', 'A Pagar']],
-      body: report.barber_commissions.map(bc => [
-        bc.barber_name,
-        `${bc.commission_percentage}%`,
-        fmtM(bc.services_total),
-        `-${fmtM(bc.pending_advances_total)}`,
-        fmtM(bc.commission_amount),
-      ]),
+      head: [['Barbero', '% Com.', 'Generado', 'Comisión', 'Adelanto', 'Total a Entregar']],
+      body: report.barber_commissions.map(bc => {
+        const comision = Number(bc.commission_amount) || 0;
+        const adelanto = Number(bc.pending_advances_total) || 0;
+        const neto = Math.max(0, comision - adelanto);
+        return [
+          bc.barber_name,
+          `${bc.commission_percentage}%`,
+          fmtM(bc.services_total),
+          fmtM(comision),
+          adelanto > 0 ? `-${fmtM(adelanto)}` : '—',
+          adelanto > comision ? `$0 (excedió)` : fmtM(neto),
+        ];
+      }),
       margin: { left: margin, right: margin },
       headStyles: { fillColor: [60, 15, 100], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
       bodyStyles: { fontSize: 8 },
@@ -269,11 +275,11 @@ const CashRegister = () => {
   }, { staleTime: 300000 });
   const shopName = shopInfo?.name || 'Barbería';
 
-  // Vales pendientes del barbero seleccionado — una sola request, filtramos pagado/cancelado
+  // Vales pendientes del barbero seleccionado — solo los del día de hoy (cada día empieza en 0)
   const { data: pendingAdvances } = useQuery(
-    ['pending-advances', advancePayForm.barber],
+    ['pending-advances', advancePayForm.barber, todayStr],
     async () => {
-      const r = await api.get(`/advances/?barber=${advancePayForm.barber}`);
+      const r = await api.get(`/advances/?barber=${advancePayForm.barber}&date_from=${todayStr}&date_to=${todayStr}`);
       const all = r.data.results || r.data;
       return all.filter(a => a.status !== 'pagado' && a.status !== 'cancelado');
     },
@@ -648,22 +654,34 @@ const CashRegister = () => {
                       <th className="p-3 md:p-4">Barbero</th>
                       <th className="p-3 md:p-4">% Com.</th>
                       <th className="p-3 md:p-4">Generado Bruto</th>
-                      <th className="p-3 md:p-4 text-red-400">Vales Adeudados</th>
-                      <th className="p-3 md:p-4">Comisión a Pagar</th>
+                      <th className="p-3 md:p-4">Comisión</th>
+                      <th className="p-3 md:p-4 text-red-400">Adelanto del Día</th>
+                      <th className="p-3 md:p-4 text-emerald-400">Total a Entregar</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5 text-sm font-bold tracking-wider">
-                    {cierreReport.barber_commissions?.map(bc => (
-                      <tr key={bc.id} className="hover:bg-white/5">
-                        <td className="p-3 md:p-4 text-white uppercase">{bc.barber_name}</td>
-                        <td className="p-3 md:p-4 text-gray-400">{bc.commission_percentage}%</td>
-                        <td className="p-3 md:p-4 text-emerald-400">${safeInt(bc.services_total).toLocaleString()}</td>
-                        <td className="p-3 md:p-4 text-red-500">-${safeInt(bc.pending_advances_total).toLocaleString()}</td>
-                        <td className="p-3 md:p-4 text-white bg-purple-500/5 text-base md:text-lg">${safeInt(bc.commission_amount).toLocaleString()}</td>
-                      </tr>
-                    ))}
+                    {cierreReport.barber_commissions?.map(bc => {
+                      const comision = safeInt(bc.commission_amount);
+                      const adelanto = safeInt(bc.pending_advances_total);
+                      const neto = comision - adelanto;
+                      const excedio = neto < 0;
+                      return (
+                        <tr key={bc.id} className="hover:bg-white/5">
+                          <td className="p-3 md:p-4 text-white uppercase">{bc.barber_name}</td>
+                          <td className="p-3 md:p-4 text-gray-400">{bc.commission_percentage}%</td>
+                          <td className="p-3 md:p-4 text-emerald-400">${safeInt(bc.services_total).toLocaleString()}</td>
+                          <td className="p-3 md:p-4 text-gray-300">${comision.toLocaleString()}</td>
+                          <td className="p-3 md:p-4 text-red-500">{adelanto > 0 ? `-$${adelanto.toLocaleString()}` : '—'}</td>
+                          <td className={`p-3 md:p-4 text-base md:text-lg font-black ${excedio ? 'text-orange-400' : 'text-emerald-400 bg-emerald-500/5'}`}>
+                            {excedio
+                              ? <span title="El adelanto superó la comisión">⚠ $0</span>
+                              : `$${neto.toLocaleString()}`}
+                          </td>
+                        </tr>
+                      );
+                    })}
                     {(!cierreReport.barber_commissions || cierreReport.barber_commissions.length === 0) && (
-                      <tr><td colSpan="5" className="p-6 text-center text-gray-500">Nadie trabajó hoy</td></tr>
+                      <tr><td colSpan="6" className="p-6 text-center text-gray-500">Nadie trabajó hoy</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -954,7 +972,7 @@ const CashRegister = () => {
             </select>
           </div>
           <div className="space-y-1">
-            <label className="text-xs uppercase font-bold text-gray-400 tracking-wider">Monto Prestado *</label>
+            <label className="text-xs uppercase font-bold text-gray-400 tracking-wider">Monto del Adelanto *</label>
             <input type="number" required min="1" className="input-glass text-yellow-500 text-lg font-black" value={advanceForm.amount} onChange={e => setAdvanceForm({...advanceForm, amount: e.target.value})} placeholder="50000" />
           </div>
           <div className="space-y-1">
@@ -977,8 +995,8 @@ const CashRegister = () => {
       {/* 5. Pagar Vale */}
       <Modal isOpen={activeModal === 'pay_advance'} onClose={() => { setActiveModal(null); setAdvancePayForm({ barber: '', advance: '', amount: '', payment_method: '', notes: '' }); }} title="Registrar Pago de Vale">
         <form onSubmit={handlePayAdvanceSubmit} className="space-y-4">
-          <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold uppercase tracking-wider leading-relaxed">
-            El barbero devuelve dinero que se le hab&#237;a adelantado. Esto queda registrado como ingreso.
+          <div className="p-3 bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 text-xs font-bold uppercase tracking-wider leading-relaxed">
+            Úsalo solo si el adelanto del día superó la comisión y el barbero devuelve el excedente en efectivo. El dinero regresa a caja como ingreso.
           </div>
           <div className="space-y-1">
             <label className="text-xs uppercase font-bold text-gray-400 tracking-wider">Barbero *</label>
@@ -994,7 +1012,7 @@ const CashRegister = () => {
               <label className="text-xs uppercase font-bold text-gray-400 tracking-wider">Vale Pendiente *</label>
               {!pendingAdvances?.length ? (
                 <div className="p-3 bg-white/5 border border-white/10 text-gray-500 text-sm font-bold uppercase tracking-wider text-center">
-                  Este barbero no tiene vales pendientes
+                  Este barbero no tiene adelantos pendientes hoy
                 </div>
               ) : (
                 <select className="input-glass" required value={advancePayForm.advance}
