@@ -39,6 +39,19 @@ class DailyReportSerializer(serializers.ModelSerializer):
     total_outflow = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
     expected_in_register = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
 
+    # Los vales son adelantos de nómina, no gastos de la barbería.
+    # Se sobreescribe el campo almacenado para que SIEMPRE devuelva el valor correcto,
+    # incluyendo reportes históricos calculados con la fórmula anterior.
+    barbershop_profit = serializers.SerializerMethodField()
+
+    def get_barbershop_profit(self, obj):
+        return (
+            (obj.total_services_amount or 0) +
+            (obj.total_products_amount or 0) -
+            (obj.total_expenses or 0) -
+            (obj.barber_commission_total or 0)
+        )
+
     class Meta:
         model = DailyReport
         fields = [

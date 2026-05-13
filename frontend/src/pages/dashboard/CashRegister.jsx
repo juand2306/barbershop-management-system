@@ -4,7 +4,7 @@ import api from '../../api/axios';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { toast } from 'react-toastify';
-import { Calculator, DollarSign, Wallet, ArrowDown, ArrowUp, Scissors, Package, Receipt, LogOut, CreditCard, Edit3, FileDown, Plus, Trash2, SplitSquareHorizontal, Printer, CheckCircle } from 'lucide-react';
+import { Calculator, DollarSign, Scissors, Package, Receipt, LogOut, CreditCard, Edit3, FileDown, Plus, Trash2, SplitSquareHorizontal, Printer, CheckCircle } from 'lucide-react';
 import { printTicket } from '../../utils/printTicket';
 import { extractApiError, getLocalDateStr, safeN } from '../../utils/helpers';
 import Modal from '../../components/Modal';
@@ -130,15 +130,19 @@ const exportReportPDF = async (report, shopName) => {
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(255, 255, 255);
 
+  const totalPlatPDF = (report.payment_breakdown || []).filter(pb => !pb.is_cash).reduce((s, pb) => s + (Number(pb.expected_amount) || 0), 0);
+  const totalCashPDF = (report.payment_breakdown || []).filter(pb => pb.is_cash).reduce((s, pb) => s + (Number(pb.expected_amount) || 0), 0);
+
   const summaryData = [
-    ['Total Servicios', fmtM(report.total_services_amount)],
-    ['Total Productos', fmtM(report.total_products_amount)],
-    ['Ingresos Brutos', fmtM((Number(report.total_services_amount)||0) + (Number(report.total_products_amount)||0))],
-    ['Total Gastos',    fmtM(report.total_expenses)],
-    ['Vales Entregados', fmtM(report.total_advances_given)],
-    ['Pagos de Vales',  fmtM(report.total_advance_payments)],
+    ['Servicios del Día', fmtM(report.total_services_amount)],
     ['Comisiones Barberos', fmtM(report.barber_commission_total)],
-    ['GANANCIA NETA BARBERIA', fmtM(report.barbershop_profit)],
+    ['Productos Vendidos', fmtM(report.total_products_amount)],
+    ['Gastos del Local', fmtM(report.total_expenses)],
+    ['Vales Entregados (Nómina)', fmtM(report.total_advances_given)],
+    ['Pagos de Vales Recibidos', fmtM(report.total_advance_payments)],
+    ['Total Plataformas', fmtM(totalPlatPDF)],
+    ['Efectivo en Caja', fmtM(totalCashPDF)],
+    ['GANANCIA NETA BARBERÍA', fmtM(report.barbershop_profit)],
   ];
 
   autoTable(doc, {
@@ -202,11 +206,12 @@ const exportReportPDF = async (report, shopName) => {
     y += 3;
     autoTable(doc, {
       startY: y + 4,
-      head: [['Método', 'Entró', 'Salió', 'Balance']],
+      head: [['Método', 'Entró', 'Gastos', 'Adelantos (nom.)', 'Neto']],
       body: report.payment_breakdown.map(pb => {
         const inc = (Number(pb.services_amount)||0) + (Number(pb.products_amount)||0) + (Number(pb.advance_payments_amount)||0);
-        const out = (Number(pb.expenses_amount)||0) + (Number(pb.advances_given_amount)||0);
-        return [pb.payment_method_name, fmtM(inc), fmtM(out), fmtM(inc - out)];
+        const gastos = Number(pb.expenses_amount) || 0;
+        const vales = Number(pb.advances_given_amount) || 0;
+        return [pb.payment_method_name, fmtM(inc), gastos > 0 ? fmtM(gastos) : '—', vales > 0 ? fmtM(vales) : '—', fmtM(inc - gastos)];
       }),
       margin: { left: margin, right: margin },
       headStyles: { fillColor: [0, 80, 100], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
@@ -325,6 +330,7 @@ const CashRegister = () => {
     mutationFn: (data) => api.post('/service-records/', data),
     onSuccess: (response) => {
       queryClient.invalidateQueries(['todaySummary']);
+      queryClient.invalidateQueries(['history-servicios']);
       setLastCreatedService(response.data);
       setServiceForm({ barber: '', service: '', price_charged: '', payment_method: '', client_name: '' });
       setServiceMixed(false);
@@ -337,6 +343,8 @@ const CashRegister = () => {
   const createProductSale = useMutation({
     mutationFn: (data) => api.post('/products/sales/', data),
     onSuccess: () => {
+      queryClient.invalidateQueries(['products']);
+      queryClient.invalidateQueries(['history-productos']);
       toast.success('✅ Venta registrada');
       setActiveModal(null);
       setProductForm({ product: '', seller: '', quantity: 1, unit_price: '', payment_method: '' });
@@ -349,6 +357,7 @@ const CashRegister = () => {
   const createExpense = useMutation({
     mutationFn: (data) => api.post('/expenses/', data),
     onSuccess: () => {
+      queryClient.invalidateQueries(['history-gastos']);
       toast.success('✅ Gasto registrado');
       setActiveModal(null);
       setExpenseForm({ detail: '', amount: '', category: 'otro', payment_method: '' });
@@ -359,6 +368,7 @@ const CashRegister = () => {
   const createAdvance = useMutation({
     mutationFn: (data) => api.post('/advances/', data),
     onSuccess: () => {
+      queryClient.invalidateQueries(['history-vales']);
       toast.success('✅ Vale entregado al barbero');
       setActiveModal(null);
       setAdvanceForm({ barber: '', amount: '', payment_method: '', detail: '' });
@@ -403,6 +413,7 @@ const CashRegister = () => {
       setActiveModal(null);
       setAdvancePayForm({ barber: '', advance: '', amount: '', payment_method: '', notes: '' });
       queryClient.invalidateQueries(['pending-advances', advancePayForm.barber]);
+      queryClient.invalidateQueries(['history-vales']);
     },
     onError: (err) => toast.error(extractApiError(err))
   });
@@ -532,6 +543,14 @@ const CashRegister = () => {
 
   const safeInt = safeN;
 
+  const totalPlatforms = (cierreReport?.payment_breakdown || [])
+    .filter(pb => !pb.is_cash)
+    .reduce((sum, pb) => sum + safeInt(pb.expected_amount), 0);
+
+  const totalCash = (cierreReport?.payment_breakdown || [])
+    .filter(pb => pb.is_cash)
+    .reduce((sum, pb) => sum + safeInt(pb.expected_amount), 0);
+
   return (
     <div className="animate-slide-up space-y-8 pb-10">
       {/* Header */}
@@ -593,25 +612,31 @@ const CashRegister = () => {
         {cierreReport && (
           <div className="space-y-10 animate-slide-up">
             {/* Summary cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="bg-[#0c0c0e] border border-emerald-500/20 p-4 md:p-6 shadow-[4px_4px_0px_rgba(16,185,129,0.2)]">
-                <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mb-2 flex items-center gap-2"><ArrowUp className="w-4 h-4 text-emerald-400"/> Ingresos Totales</p>
-                <p className="text-2xl md:text-3xl font-black text-emerald-400">
-                  ${(safeInt(cierreReport.total_services_amount) + safeInt(cierreReport.total_products_amount) + safeInt(cierreReport.total_advance_payments)).toLocaleString()}
-                </p>
-                <p className="text-[10px] text-gray-500 uppercase mt-2 font-bold tracking-widest">Servicios + Productos + Vales Pagados</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+              <div className="bg-[#0c0c0e] border border-emerald-500/20 p-4 md:p-5 shadow-[4px_4px_0px_rgba(16,185,129,0.2)]">
+                <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mb-2 flex items-center gap-2"><Scissors className="w-4 h-4 text-emerald-400"/> Servicios</p>
+                <p className="text-2xl md:text-3xl font-black text-emerald-400">${safeInt(cierreReport.total_services_amount).toLocaleString()}</p>
+                <p className="text-[10px] text-purple-400/80 uppercase mt-2 font-bold tracking-widest">Comisiones: ${safeInt(cierreReport.barber_commission_total).toLocaleString()}</p>
               </div>
-              <div className="bg-[#0c0c0e] border border-red-500/20 p-4 md:p-6 shadow-[4px_4px_0px_rgba(239,68,68,0.2)]">
-                <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mb-2 flex items-center gap-2"><ArrowDown className="w-4 h-4 text-red-400"/> Egresos Totales</p>
-                <p className="text-2xl md:text-3xl font-black text-red-500">
-                  ${(safeInt(cierreReport.total_expenses) + safeInt(cierreReport.total_advances_given)).toLocaleString()}
-                </p>
-                <p className="text-[10px] text-gray-500 uppercase mt-2 font-bold tracking-widest">Gastos + Vales Dados</p>
+              <div className="bg-[#0c0c0e] border border-cyan-500/20 p-4 md:p-5 shadow-[4px_4px_0px_rgba(6,182,212,0.2)]">
+                <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mb-2 flex items-center gap-2"><Package className="w-4 h-4 text-cyan-400"/> Productos</p>
+                <p className="text-2xl md:text-3xl font-black text-cyan-400">${safeInt(cierreReport.total_products_amount).toLocaleString()}</p>
+                <p className="text-[10px] text-gray-500 uppercase mt-2 font-bold tracking-widest">Ventas del día</p>
               </div>
-              <div className="bg-[#0c0c0e] border border-purple-500/20 p-4 md:p-6 shadow-[4px_4px_0px_rgba(168,85,247,0.2)]">
-                <p className="text-xs text-purple-300 font-bold uppercase tracking-widest mb-2 flex items-center gap-2"><Wallet className="w-4 h-4 text-purple-400"/> Nómina Comisiones</p>
-                <p className="text-2xl md:text-3xl font-black text-purple-400">${safeInt(cierreReport.barber_commission_total).toLocaleString()}</p>
-                <p className="text-[10px] text-purple-500/60 uppercase mt-2 font-bold tracking-widest">Dinero que pertenece a barberos</p>
+              <div className="bg-[#0c0c0e] border border-red-500/20 p-4 md:p-5 shadow-[4px_4px_0px_rgba(239,68,68,0.2)]">
+                <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mb-2 flex items-center gap-2"><Receipt className="w-4 h-4 text-red-400"/> Gastos</p>
+                <p className="text-2xl md:text-3xl font-black text-red-500">${safeInt(cierreReport.total_expenses).toLocaleString()}</p>
+                <p className="text-[10px] text-gray-500 uppercase mt-2 font-bold tracking-widest">Gastos del local</p>
+              </div>
+              <div className="bg-[#0c0c0e] border border-blue-500/20 p-4 md:p-5 shadow-[4px_4px_0px_rgba(59,130,246,0.2)]">
+                <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mb-2 flex items-center gap-2"><CreditCard className="w-4 h-4 text-blue-400"/> Plataformas</p>
+                <p className="text-2xl md:text-3xl font-black text-blue-400">${totalPlatforms.toLocaleString()}</p>
+                <p className="text-[10px] text-gray-500 uppercase mt-2 font-bold tracking-widest">Nequi, Daviplata, etc.</p>
+              </div>
+              <div className="bg-[#0c0c0e] border border-amber-500/20 p-4 md:p-5 shadow-[4px_4px_0px_rgba(245,158,11,0.2)]">
+                <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mb-2 flex items-center gap-2"><DollarSign className="w-4 h-4 text-amber-400"/> Efectivo en Caja</p>
+                <p className="text-2xl md:text-3xl font-black text-amber-400">${totalCash.toLocaleString()}</p>
+                <p className="text-[10px] text-gray-500 uppercase mt-2 font-bold tracking-widest">Lo que debe estar en caja</p>
               </div>
             </div>
 
@@ -626,14 +651,17 @@ const CashRegister = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {cierreReport.payment_breakdown?.map(pb => {
                   const inflows = safeInt(pb.services_amount) + safeInt(pb.products_amount) + safeInt(pb.advance_payments_amount);
-                  const outflows = safeInt(pb.expenses_amount) + safeInt(pb.advances_given_amount);
+                  const gastos = safeInt(pb.expenses_amount);
+                  const vales = safeInt(pb.advances_given_amount);
+                  const total = inflows - gastos;
                   return (
                     <div key={pb.id} className="bg-[#0c0c0e] p-5 border-l-4 border-emerald-400 shadow-[2px_2px_0px_rgba(0,0,0,0.8)]">
                       <h4 className="font-black text-white uppercase text-lg mb-4">{pb.payment_method_name}</h4>
                       <div className="space-y-2 text-sm font-bold tracking-wider">
                         <div className="flex justify-between"><span className="text-gray-500">ENTRÓ:</span><span className="text-emerald-400">+${inflows.toLocaleString()}</span></div>
-                        <div className="flex justify-between"><span className="text-gray-500">SALIÓ:</span><span className="text-red-400">-${outflows.toLocaleString()}</span></div>
-                        <div className="flex justify-between pt-2 border-t border-white/10 mt-2"><span className="text-gray-300">TOTAL ESPERADO:</span><span className="text-white text-xl">${(inflows - outflows).toLocaleString()}</span></div>
+                        {gastos > 0 && <div className="flex justify-between"><span className="text-gray-500">GASTOS:</span><span className="text-red-400">-${gastos.toLocaleString()}</span></div>}
+                        {vales > 0 && <div className="flex justify-between items-center"><span className="text-gray-500">ADELANTOS:</span><span className="text-gray-500 text-xs">${vales.toLocaleString()} (en comisiones)</span></div>}
+                        <div className="flex justify-between pt-2 border-t border-white/10 mt-2"><span className="text-gray-300">TOTAL ESPERADO:</span><span className="text-white text-xl">${total.toLocaleString()}</span></div>
                       </div>
                     </div>
                   );

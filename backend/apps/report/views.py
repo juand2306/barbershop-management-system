@@ -288,11 +288,9 @@ class DailyReportViewSet(viewsets.ModelViewSet):
             report.total_advances_given = total_advances
             
             report.barber_commission_total = total_commissions
-            # barbershop_profit = (ingresos extras) - egresos - comisiones
-            total_income = total_services + total_products + total_adv_payments
-            total_outflow = total_expenses + total_advances
-            
-            report.barbershop_profit = total_income - total_outflow - total_commissions
+            # profit = servicios + productos - gastos - comisiones
+            # Vales y pagos de vales son movimientos de nómina, no afectan la ganancia neta
+            report.barbershop_profit = total_services + total_products - total_expenses - total_commissions
             
             # Pasar a estado 'guardado' para que lo revisen, o dejar en borrador si habian enviado un draft anterior
             if report.status == 'confirmado':

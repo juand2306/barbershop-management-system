@@ -187,15 +187,19 @@ class DailyReportPaymentBreakdown(models.Model):
     def expected_amount(self):
         """
         Dinero esperado en este metodo de pago al final del dia.
-        = Ingresos - Egresos
-        (Las comisiones se pagan aparte, generalmente en efectivo)
+        = Ingresos - Gastos
+
+        Los vales (advances_given_amount) son adelantos de nómina que ya están
+        cubiertos dentro del 50% de comisiones de los barberos.
+        NO se restan aquí: la ecuación de cierre es
+          Servicios = Comisiones + Gastos + Plataformas + Efectivo
+        y los vales pertenecen a la parte de Comisiones, no a Gastos.
         """
         return (
             self.services_amount
             + self.products_amount
             + self.advance_payments_amount
             - self.expenses_amount
-            - self.advances_given_amount
         )
 
 

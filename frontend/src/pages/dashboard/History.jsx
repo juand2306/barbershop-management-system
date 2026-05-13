@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { fmt } from '../../utils/helpers';
 import StatusBadge from '../../components/StatusBadge';
+import Modal from '../../components/Modal';
 import { format, parseISO, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { printTicket } from '../../utils/printTicket';
@@ -233,8 +234,141 @@ const Td = ({ children, right, mono, muted }) => (
   </td>
 );
 
+// ─── Cierre Detail Modal ─────────────────────────────────────────────────────
+const CierreDetailModal = ({ report, onClose }) => {
+  const sv = (v) => { const n = Number(v); return isNaN(n) ? 0 : n; };
+
+  const totalPlatforms = (report.payment_breakdown || [])
+    .filter(pb => !pb.is_cash)
+    .reduce((s, pb) => s + sv(pb.expected_amount), 0);
+
+  const totalCash = (report.payment_breakdown || [])
+    .filter(pb => pb.is_cash)
+    .reduce((s, pb) => s + sv(pb.expected_amount), 0);
+
+  return (
+    <Modal isOpen onClose={onClose} title={`Cierre del ${fmtDate(report.report_date)}`}>
+      <div className="space-y-6">
+
+        {/* Estado y notas */}
+        <div className="flex items-center gap-3 flex-wrap">
+          <StatusBadge status={report.status} />
+          {report.notes && <span className="text-xs text-gray-500 italic">{report.notes}</span>}
+        </div>
+
+        {/* 5 cards */}
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+          <div className="bg-[#0c0c0e] border border-emerald-500/20 p-3 shadow-[2px_2px_0px_rgba(16,185,129,0.2)]">
+            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-1 flex items-center gap-1"><Scissors className="w-3 h-3 text-emerald-400"/> Servicios</p>
+            <p className="text-xl font-black text-emerald-400">{fmt(report.total_services_amount)}</p>
+            <p className="text-[9px] text-purple-400/80 uppercase mt-1 font-bold tracking-widest">Comisiones: {fmt(report.barber_commission_total)}</p>
+          </div>
+          <div className="bg-[#0c0c0e] border border-cyan-500/20 p-3 shadow-[2px_2px_0px_rgba(6,182,212,0.2)]">
+            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-1 flex items-center gap-1"><Package className="w-3 h-3 text-cyan-400"/> Productos</p>
+            <p className="text-xl font-black text-cyan-400">{fmt(report.total_products_amount)}</p>
+            <p className="text-[9px] text-gray-500 uppercase mt-1 font-bold tracking-widest">Ventas del día</p>
+          </div>
+          <div className="bg-[#0c0c0e] border border-red-500/20 p-3 shadow-[2px_2px_0px_rgba(239,68,68,0.2)]">
+            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-1 flex items-center gap-1"><TrendingDown className="w-3 h-3 text-red-400"/> Gastos</p>
+            <p className="text-xl font-black text-red-500">{fmt(report.total_expenses)}</p>
+            <p className="text-[9px] text-gray-500 uppercase mt-1 font-bold tracking-widest">Gastos del local</p>
+          </div>
+          <div className="bg-[#0c0c0e] border border-blue-500/20 p-3 shadow-[2px_2px_0px_rgba(59,130,246,0.2)]">
+            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-1 flex items-center gap-1"><CreditCard className="w-3 h-3 text-blue-400"/> Plataformas</p>
+            <p className="text-xl font-black text-blue-400">{fmt(totalPlatforms)}</p>
+            <p className="text-[9px] text-gray-500 uppercase mt-1 font-bold tracking-widest">Nequi, Daviplata, etc.</p>
+          </div>
+          <div className="bg-[#0c0c0e] border border-amber-500/20 p-3 shadow-[2px_2px_0px_rgba(245,158,11,0.2)]">
+            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-1 flex items-center gap-1"><DollarSign className="w-3 h-3 text-amber-400"/> Efectivo en Caja</p>
+            <p className="text-xl font-black text-amber-400">{fmt(totalCash)}</p>
+            <p className="text-[9px] text-gray-500 uppercase mt-1 font-bold tracking-widest">Lo que debe estar en caja</p>
+          </div>
+        </div>
+
+        {/* Ganancia Neta */}
+        <div className="border border-cyan-500/30 bg-cyan-500/5 p-4 text-center shadow-[2px_2px_0px_rgba(6,182,212,0.2)]">
+          <p className="text-xs font-bold uppercase text-cyan-500 tracking-widest mb-1">GANANCIA NETA BARBERÍA</p>
+          <p className="text-3xl font-black text-cyan-400">{fmt(report.barbershop_profit)}</p>
+        </div>
+
+        {/* Desglose por método de pago */}
+        {report.payment_breakdown?.length > 0 && (
+          <div>
+            <h3 className="text-xs font-black uppercase text-white tracking-widest mb-3 border-b border-white/10 pb-2">Desglose por Método de Pago</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {report.payment_breakdown.map(pb => {
+                const inflows = sv(pb.services_amount) + sv(pb.products_amount) + sv(pb.advance_payments_amount);
+                const gastos = sv(pb.expenses_amount);
+                const vales = sv(pb.advances_given_amount);
+                const total = inflows - gastos;
+                return (
+                  <div key={pb.id} className="bg-[#0c0c0e] p-4 border-l-4 border-emerald-400">
+                    <h4 className="font-black text-white uppercase text-sm mb-3">{pb.payment_method_name}</h4>
+                    <div className="space-y-1.5 text-xs font-bold tracking-wider">
+                      <div className="flex justify-between"><span className="text-gray-500">ENTRÓ:</span><span className="text-emerald-400">+{fmt(inflows)}</span></div>
+                      {gastos > 0 && <div className="flex justify-between"><span className="text-gray-500">GASTOS:</span><span className="text-red-400">-{fmt(gastos)}</span></div>}
+                      {vales > 0 && <div className="flex justify-between items-center"><span className="text-gray-500">ADELANTOS:</span><span className="text-gray-500">{fmt(vales)} (en comisiones)</span></div>}
+                      <div className="flex justify-between pt-1.5 border-t border-white/10 mt-1">
+                        <span className="text-gray-300">TOTAL ESPERADO:</span>
+                        <span className="text-white font-black">{fmt(total)}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Comisiones */}
+        {report.barber_commissions?.length > 0 && (
+          <div>
+            <h3 className="text-xs font-black uppercase text-white tracking-widest mb-3 border-b border-white/10 pb-2">Comisiones Barberos</h3>
+            <div className="overflow-x-auto custom-scrollbar">
+              <table style={{ minWidth: '460px', width: '100%' }}>
+                <thead className="text-[10px] uppercase font-black text-purple-400 bg-purple-500/10 border-b border-purple-500/20">
+                  <tr>
+                    <th className="p-2 text-left">Barbero</th>
+                    <th className="p-2 text-left">%</th>
+                    <th className="p-2 text-right">Generado</th>
+                    <th className="p-2 text-right">Comisión</th>
+                    <th className="p-2 text-right text-red-400">Adelanto</th>
+                    <th className="p-2 text-right text-emerald-400">A Entregar</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5 text-xs font-bold">
+                  {report.barber_commissions.map(bc => {
+                    const comision = sv(bc.commission_amount);
+                    const adelanto = sv(bc.pending_advances_total);
+                    const neto = comision - adelanto;
+                    return (
+                      <tr key={bc.id}>
+                        <td className="p-2 text-white uppercase">{bc.barber_name}</td>
+                        <td className="p-2 text-gray-400">{bc.commission_percentage}%</td>
+                        <td className="p-2 text-right text-emerald-400">{fmt(bc.services_total)}</td>
+                        <td className="p-2 text-right text-gray-300">{fmt(comision)}</td>
+                        <td className="p-2 text-right text-red-500">{adelanto > 0 ? `-${fmt(adelanto)}` : '—'}</td>
+                        <td className={`p-2 text-right font-black ${neto < 0 ? 'text-orange-400' : 'text-emerald-400'}`}>
+                          {neto < 0 ? '⚠ $0' : fmt(neto)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+      </div>
+    </Modal>
+  );
+};
+
 // ─── Tab: Cierres de Caja ────────────────────────────────────────────────────
 const CierresTab = ({ filters, onFilterChange, barbers, paymentMethods }) => {
+  const [selectedReport, setSelectedReport] = useState(null);
+
   const params = new URLSearchParams();
   if (filters.date_from) params.set('date_from', filters.date_from);
   if (filters.date_to) params.set('date_to', filters.date_to);
@@ -280,7 +414,6 @@ const CierresTab = ({ filters, onFilterChange, barbers, paymentMethods }) => {
             <Th>Estado</Th>
             <Th right>Servicios</Th>
             <Th right>Productos</Th>
-            <Th right>Pagos Vales</Th>
             <Th right>Gastos</Th>
             <Th right>Vales dados</Th>
             <Th right>Comisiones</Th>
@@ -289,7 +422,12 @@ const CierresTab = ({ filters, onFilterChange, barbers, paymentMethods }) => {
         </thead>
         <tbody>
           {filtered.map(r => (
-            <tr key={r.id} className="hover:bg-white/[0.02] transition-colors group">
+            <tr
+              key={r.id}
+              className="hover:bg-white/[0.05] transition-colors cursor-pointer"
+              onClick={() => setSelectedReport(r)}
+              title="Click para ver detalle del cierre"
+            >
               <Td>
                 <div className="font-bold text-white">{fmtDate(r.report_date)}</div>
                 {r.notes && <div className="text-[11px] text-gray-500 mt-0.5 max-w-[180px] truncate">{r.notes}</div>}
@@ -297,7 +435,6 @@ const CierresTab = ({ filters, onFilterChange, barbers, paymentMethods }) => {
               <Td><StatusBadge status={r.status} /></Td>
               <Td right mono>{fmt(r.total_services_amount)}</Td>
               <Td right mono>{fmt(r.total_products_amount)}</Td>
-              <Td right mono>{fmt(r.total_advance_payments)}</Td>
               <Td right mono muted>{fmt(r.total_expenses)}</Td>
               <Td right mono muted>{fmt(r.total_advances_given)}</Td>
               <Td right mono muted>{fmt(r.barber_commission_total)}</Td>
@@ -310,6 +447,10 @@ const CierresTab = ({ filters, onFilterChange, barbers, paymentMethods }) => {
           ))}
         </tbody>
       </TableWrap>
+
+      {selectedReport && (
+        <CierreDetailModal report={selectedReport} onClose={() => setSelectedReport(null)} />
+      )}
     </>
   );
 };
