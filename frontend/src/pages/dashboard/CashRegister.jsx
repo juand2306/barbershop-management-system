@@ -563,13 +563,23 @@ const CashRegister = () => {
     .filter(pb => pb.is_cash)
     .reduce((sum, pb) => sum + safeN(pb.expected_amount), 0);
 
+  // Vales entregados EN EFECTIVO ese día — ya salieron físicamente de la caja
+  // pero expected_amount NO los descuenta, así que hay que restarlos manualmente
+  const totalCashAdvancesGiven = (cierreReport?.payment_breakdown || [])
+    .filter(pb => pb.is_cash)
+    .reduce((sum, pb) => sum + safeN(pb.advances_given_amount), 0);
+
   // Cuánto debe pagar la cajera a los barberos en efectivo (comisión menos adelanto ya entregado)
   const totalToPayBarbers = (cierreReport?.barber_commissions || [])
     .reduce((sum, bc) => {
       const neto = safeN(bc.commission_amount) - safeN(bc.pending_advances_total);
       return sum + Math.max(0, neto);
     }, 0);
-  const efectivoAEntregar = totalCash - totalToPayBarbers;
+
+  // FIX: caja física real = expected_amount - vales ya entregados en cash
+  // efectivoAEntregar = cajaFísica - lo que aún se debe a los barberos
+  // Los vales cancelan: salen de caja pero también reducen lo que se debe → resultado neto correcto
+  const efectivoAEntregar = (totalCash - totalCashAdvancesGiven) - totalToPayBarbers;
 
   return (
     <div className="animate-slide-up space-y-8 pb-10">

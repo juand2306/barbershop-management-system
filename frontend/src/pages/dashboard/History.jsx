@@ -236,13 +236,21 @@ const CierreDetailModal = ({ report, onClose }) => {
     .filter(pb => pb.is_cash)
     .reduce((s, pb) => s + sv(pb.expected_amount), 0);
 
+  // Vales entregados EN EFECTIVO ese día — ya salieron físicamente de la caja
+  // pero expected_amount NO los descuenta, así que hay que restarlos manualmente
+  const totalCashAdvancesGiven = (report.payment_breakdown || [])
+    .filter(pb => pb.is_cash)
+    .reduce((s, pb) => s + sv(pb.advances_given_amount), 0);
+
   // Cuánto debe pagar la cajera a los barberos en efectivo (comisión menos adelanto ya entregado)
   const totalToPayBarbers = (report.barber_commissions || [])
     .reduce((sum, bc) => {
       const neto = sv(bc.commission_amount) - sv(bc.pending_advances_total);
       return sum + Math.max(0, neto);
     }, 0);
-  const efectivoAEntregar = totalCash - totalToPayBarbers;
+
+  // FIX: caja física real = expected_amount - vales ya entregados en cash
+  const efectivoAEntregar = (totalCash - totalCashAdvancesGiven) - totalToPayBarbers;
 
   return (
     <Modal isOpen onClose={onClose} title={`Cierre del ${fmtDate(report.report_date)}`}>
