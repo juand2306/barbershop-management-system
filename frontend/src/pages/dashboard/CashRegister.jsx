@@ -9,6 +9,18 @@ import { printTicket } from '../../utils/printTicket';
 import { extractApiError, getLocalDateStr, safeN } from '../../utils/helpers';
 import Modal from '../../components/Modal';
 
+// ─── Constantes de módulo (fuera del componente para evitar recreación en cada render) ──────────
+// FIX: movido desde dentro del componente donde se recreaba en cada render
+const EXPENSE_CATEGORIES = [
+  { value: 'compras',       label: 'Compras / Insumos' },
+  { value: 'servicios',     label: 'Servicios Externos' },
+  { value: 'mantenimiento', label: 'Mantenimiento' },
+  { value: 'nomina',        label: 'Nómina / Personal' },
+  { value: 'arriendo',      label: 'Arriendo' },
+  { value: 'publicidad',    label: 'Publicidad' },
+  { value: 'otro',          label: 'Otro' },
+];
+
 // ─── Mixed Payment UI Component ───────────────────────────────────────────────
 const MixedPaymentSelector = ({ total, splits, onSplitsChange, paymentMethods }) => {
   const totalSplits = splits.reduce((acc, s) => acc + (parseFloat(s.amount) || 0), 0);
@@ -267,13 +279,18 @@ const CashRegister = () => {
   const [editNotes, setEditNotes] = useState('');
   const [isExportingPDF, setIsExportingPDF] = useState(false);
   const [advancePayForm, setAdvancePayForm] = useState({ barber: '', advance: '', amount: '', payment_method: '', notes: '' });
+  // FIX: reemplaza window.confirm() — modal reutilizable para cualquier acción destructiva
+  const [confirmModal, setConfirmModal] = useState({ open: false, message: '', onConfirm: null });
+  const openConfirm = (message, onConfirm) => setConfirmModal({ open: true, message, onConfirm });
+  const closeConfirm = () => setConfirmModal({ open: false, message: '', onConfirm: null });
 
   // ── Data queries ──────────────────────────────────────────────────
   // Catálogos estáticos: staleTime de 5 min — cambian raramente y no necesitan refetch en cada render
   const { data: barbers } = useQuery(['barbers'], async () => { const r = await api.get('/barbers/'); return r.data.results || r.data; }, { staleTime: 300_000 });
   const { data: services } = useQuery(['services'], async () => { const r = await api.get('/services/'); return r.data.results || r.data; }, { staleTime: 300_000 });
   const { data: products } = useQuery(['products'], async () => { const r = await api.get('/products/'); return r.data.results || r.data; }, { staleTime: 120_000 });
-  const { data: paymentMethods } = useQuery(['paymentMethods'], async () => { const r = await api.get('/payment-methods/'); return r.data.results || r.data; }, { staleTime: 300_000 });
+  // FIX: clave unificada con History.jsx (['payment-methods']) para compartir caché y evitar doble fetch
+  const { data: paymentMethods } = useQuery(['payment-methods'], async () => { const r = await api.get('/payment-methods/'); return r.data.results || r.data; }, { staleTime: 300_000 });
   const { data: shopInfo } = useQuery(['shop-info'], async () => {
     const r = await api.get('/barbershop/');
     return r.data?.results?.[0] || (Array.isArray(r.data) ? r.data[0] : r.data) || {};
@@ -307,22 +324,19 @@ const CashRegister = () => {
   const [advanceForm, setAdvanceForm] = useState({ barber: '', amount: '', payment_method: '', detail: '' });
 
   // ── Auto-fill unit_price cuando selecciona producto ───────────────
-  const handleProductSelect = async (productId) => {
+  // FIX: derivar el precio del array `products` ya cargado en caché (useQuery['products'])
+  // en lugar de hacer un fetch adicional a /products/{id}/get-price/ por cada selección.
+  const handleProductSelect = (productId) => {
     if (!productId) {
       setProductForm(prev => ({ ...prev, product: '', unit_price: '' }));
       return;
     }
-    
-    try {
-      const response = await api.get(`/products/${productId}/get-price/`);
-      setProductForm(prev => ({
-        ...prev,
-        product: productId,
-        unit_price: response.data.price
-      }));
-    } catch (error) {
-      toast.error('Error al obtener precio del producto');
-    }
+    const found = (products || []).find(p => String(p.id) === String(productId));
+    setProductForm(prev => ({
+      ...prev,
+      product: productId,
+      unit_price: found?.price ?? '',
+    }));
   };
 
   // ── Mutations ─────────────────────────────────────────────────────
@@ -381,6 +395,8 @@ const CashRegister = () => {
     onSuccess: (res) => {
       toast.success('Arqueo calculado exitosamente');
       setCierreReport(res.data);
+      // FIX: invalidar el historial de cierres para que History.jsx muestre datos frescos
+      queryClient.invalidateQueries(['history-cierres']);
     },
     onError: (err) => toast.error(extractApiError(err))
   });
@@ -401,18 +417,23 @@ const CashRegister = () => {
       toast.success('↺ Arqueo recalculado con datos actuales');
       setCierreReport(res.data);
       setActiveModal(null);
+      // FIX: sincronizar el historial de cierres con los nuevos datos recalculados
+      queryClient.invalidateQueries(['history-cierres']);
     },
     onError: (err) => toast.error(extractApiError(err))
   });
 
   const payAdvance = useMutation({
+    // 'barber' se incluye en variables para poder usarlo en onSuccess sin depender del form ya reseteado
     mutationFn: ({ advanceId, amount, payment_method, notes }) =>
       api.post(`/advances/${advanceId}/registrar-pago/`, { amount, payment_method, notes, payment_date: todayStr }),
-    onSuccess: (res) => {
+    onSuccess: (_, variables) => {
       toast.success('✅ Pago de vale registrado correctamente');
       setActiveModal(null);
       setAdvancePayForm({ barber: '', advance: '', amount: '', payment_method: '', notes: '' });
-      queryClient.invalidateQueries(['pending-advances', advancePayForm.barber]);
+      // FIX: usar variables.barber (capturado al momento del mutate) en lugar de advancePayForm.barber
+      // que ya fue reseteado a '' en la línea anterior
+      queryClient.invalidateQueries(['pending-advances', variables.barber]);
       queryClient.invalidateQueries(['history-vales']);
     },
     onError: (err) => toast.error(extractApiError(err))
@@ -513,6 +534,7 @@ const CashRegister = () => {
     if (!advancePayForm.payment_method) { toast.error('Selecciona método de pago'); return; }
     payAdvance.mutate({
       advanceId: advancePayForm.advance,
+      barber: advancePayForm.barber,  // necesario para invalidar la query correcta en onSuccess
       amount,
       payment_method: advancePayForm.payment_method,
       notes: advancePayForm.notes,
@@ -531,25 +553,23 @@ const CashRegister = () => {
   // ── UI helpers ────────────────────────────────────────────────────
   // ActionBtn is defined at module scope above (outside component) to avoid remounting
 
-  const EXPENSE_CATEGORIES = [
-    { value: 'compras', label: 'Compras / Insumos' },
-    { value: 'servicios', label: 'Servicios Externos' },
-    { value: 'mantenimiento', label: 'Mantenimiento' },
-    { value: 'nomina', label: 'Nómina / Personal' },
-    { value: 'arriendo', label: 'Arriendo' },
-    { value: 'publicidad', label: 'Publicidad' },
-    { value: 'otro', label: 'Otro' },
-  ];
-
-  const safeInt = safeN;
+  // FIX: EXPENSE_CATEGORIES movido a nivel de módulo (arriba). safeInt eliminado — usar safeN directamente.
 
   const totalPlatforms = (cierreReport?.payment_breakdown || [])
     .filter(pb => !pb.is_cash)
-    .reduce((sum, pb) => sum + safeInt(pb.expected_amount), 0);
+    .reduce((sum, pb) => sum + safeN(pb.expected_amount), 0);
 
   const totalCash = (cierreReport?.payment_breakdown || [])
     .filter(pb => pb.is_cash)
-    .reduce((sum, pb) => sum + safeInt(pb.expected_amount), 0);
+    .reduce((sum, pb) => sum + safeN(pb.expected_amount), 0);
+
+  // Cuánto debe pagar la cajera a los barberos en efectivo (comisión menos adelanto ya entregado)
+  const totalToPayBarbers = (cierreReport?.barber_commissions || [])
+    .reduce((sum, bc) => {
+      const neto = safeN(bc.commission_amount) - safeN(bc.pending_advances_total);
+      return sum + Math.max(0, neto);
+    }, 0);
+  const efectivoAEntregar = totalCash - totalToPayBarbers;
 
   return (
     <div className="animate-slide-up space-y-8 pb-10">
@@ -582,12 +602,10 @@ const CashRegister = () => {
             <div className="bg-emerald-500 text-black p-2.5 md:p-3 shadow-[4px_4px_0px_rgba(0,0,0,1)] rounded-sm">
               <Calculator className="w-6 h-6 md:w-8 md:h-8" />
             </div>
-            <div>
+            <div className="min-w-0">
               <h2 className="text-xl md:text-3xl font-black uppercase tracking-tighter text-emerald-400">Arqueo Financiero</h2>
-              <p className="text-gray-500 text-xs font-bold uppercase tracking-widest">
-                Calcula exacto cuánto debe haber en caja
-                {cierreReport && <span className="ml-2 text-purple-400">| Fecha: {cierreReport.report_date}</span>}
-              </p>
+              <p className="text-gray-500 text-xs font-bold uppercase tracking-widest">Calcula exacto cuánto debe haber en caja</p>
+              {cierreReport && <p className="text-purple-400 text-xs font-bold uppercase tracking-widest mt-0.5">Fecha: {cierreReport.report_date}</p>}
             </div>
           </div>
           <div className="flex gap-2 md:gap-3 flex-wrap justify-start md:justify-end w-full md:w-auto">
@@ -615,17 +633,17 @@ const CashRegister = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
               <div className="bg-[#0c0c0e] border border-emerald-500/20 p-4 md:p-5 shadow-[4px_4px_0px_rgba(16,185,129,0.2)]">
                 <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mb-2 flex items-center gap-2"><Scissors className="w-4 h-4 text-emerald-400"/> Servicios</p>
-                <p className="text-2xl md:text-3xl font-black text-emerald-400">${safeInt(cierreReport.total_services_amount).toLocaleString()}</p>
-                <p className="text-[10px] text-purple-400/80 uppercase mt-2 font-bold tracking-widest">Comisiones: ${safeInt(cierreReport.barber_commission_total).toLocaleString()}</p>
+                <p className="text-2xl md:text-3xl font-black text-emerald-400">${safeN(cierreReport.total_services_amount).toLocaleString()}</p>
+                <p className="text-[10px] text-purple-400/80 uppercase mt-2 font-bold tracking-widest">Comisiones: ${safeN(cierreReport.barber_commission_total).toLocaleString()}</p>
               </div>
               <div className="bg-[#0c0c0e] border border-cyan-500/20 p-4 md:p-5 shadow-[4px_4px_0px_rgba(6,182,212,0.2)]">
                 <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mb-2 flex items-center gap-2"><Package className="w-4 h-4 text-cyan-400"/> Productos</p>
-                <p className="text-2xl md:text-3xl font-black text-cyan-400">${safeInt(cierreReport.total_products_amount).toLocaleString()}</p>
+                <p className="text-2xl md:text-3xl font-black text-cyan-400">${safeN(cierreReport.total_products_amount).toLocaleString()}</p>
                 <p className="text-[10px] text-gray-500 uppercase mt-2 font-bold tracking-widest">Ventas del día</p>
               </div>
               <div className="bg-[#0c0c0e] border border-red-500/20 p-4 md:p-5 shadow-[4px_4px_0px_rgba(239,68,68,0.2)]">
                 <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mb-2 flex items-center gap-2"><Receipt className="w-4 h-4 text-red-400"/> Gastos</p>
-                <p className="text-2xl md:text-3xl font-black text-red-500">${safeInt(cierreReport.total_expenses).toLocaleString()}</p>
+                <p className="text-2xl md:text-3xl font-black text-red-500">${safeN(cierreReport.total_expenses).toLocaleString()}</p>
                 <p className="text-[10px] text-gray-500 uppercase mt-2 font-bold tracking-widest">Gastos del local</p>
               </div>
               <div className="bg-[#0c0c0e] border border-blue-500/20 p-4 md:p-5 shadow-[4px_4px_0px_rgba(59,130,246,0.2)]">
@@ -636,13 +654,19 @@ const CashRegister = () => {
               <div className="bg-[#0c0c0e] border border-amber-500/20 p-4 md:p-5 shadow-[4px_4px_0px_rgba(245,158,11,0.2)]">
                 <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mb-2 flex items-center gap-2"><DollarSign className="w-4 h-4 text-amber-400"/> Efectivo en Caja</p>
                 <p className="text-2xl md:text-3xl font-black text-amber-400">${totalCash.toLocaleString()}</p>
-                <p className="text-[10px] text-gray-500 uppercase mt-2 font-bold tracking-widest">Lo que debe estar en caja</p>
+                <p className="text-[10px] text-gray-500 uppercase mt-2 font-bold tracking-widest">Efectivo</p>
+                <div className="mt-2 pt-2 border-t border-white/10">
+                  <span className="block text-[10px] text-yellow-400/70 font-black uppercase tracking-widest">Dinero a entregar:</span>
+                  <span className={`block text-lg font-black mt-0.5 ${efectivoAEntregar >= 0 ? 'text-yellow-400' : 'text-orange-400'}`}>
+                    ${efectivoAEntregar.toLocaleString()}
+                  </span>
+                </div>
               </div>
             </div>
 
             <div className="border border-cyan-500/30 bg-cyan-500/5 p-5 md:p-8 text-center shadow-[4px_4px_0px_rgba(6,182,212,0.2)]">
               <p className="text-xs sm:text-sm font-bold uppercase text-cyan-500 tracking-widest mb-2">GANANCIA NETA BARBERÍA (PROFIT)</p>
-              <p className="text-3xl sm:text-4xl md:text-5xl font-black text-cyan-400 tracking-tighter">${safeInt(cierreReport.barbershop_profit).toLocaleString()}</p>
+              <p className="text-3xl sm:text-4xl md:text-5xl font-black text-cyan-400 tracking-tighter">${safeN(cierreReport.barbershop_profit).toLocaleString()}</p>
             </div>
 
             {/* Payment breakdown */}
@@ -650,10 +674,13 @@ const CashRegister = () => {
               <h3 className="text-lg font-black uppercase text-white tracking-widest mb-6 border-b border-white/10 pb-2">Desglose por Método de Pago</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {cierreReport.payment_breakdown?.map(pb => {
-                  const inflows = safeInt(pb.services_amount) + safeInt(pb.products_amount) + safeInt(pb.advance_payments_amount);
-                  const gastos = safeInt(pb.expenses_amount);
-                  const vales = safeInt(pb.advances_given_amount);
-                  const total = inflows - gastos;
+                  const inflows = safeN(pb.services_amount) + safeN(pb.products_amount) + safeN(pb.advance_payments_amount);
+                  const gastos = safeN(pb.expenses_amount);
+                  const vales = safeN(pb.advances_given_amount);
+                  // FIX: usar pb.expected_amount del API como fuente de verdad para el total.
+                  // Esto garantiza consistencia con totalPlatforms/totalCash que también usan ese campo.
+                  // Si la fórmula del modelo cambia, ambas secciones se actualizan automáticamente.
+                  const total = safeN(pb.expected_amount);
                   return (
                     <div key={pb.id} className="bg-[#0c0c0e] p-5 border-l-4 border-emerald-400 shadow-[2px_2px_0px_rgba(0,0,0,0.8)]">
                       <h4 className="font-black text-white uppercase text-lg mb-4">{pb.payment_method_name}</h4>
@@ -689,15 +716,15 @@ const CashRegister = () => {
                   </thead>
                   <tbody className="divide-y divide-white/5 text-sm font-bold tracking-wider">
                     {cierreReport.barber_commissions?.map(bc => {
-                      const comision = safeInt(bc.commission_amount);
-                      const adelanto = safeInt(bc.pending_advances_total);
+                      const comision = safeN(bc.commission_amount);
+                      const adelanto = safeN(bc.pending_advances_total);
                       const neto = comision - adelanto;
                       const excedio = neto < 0;
                       return (
                         <tr key={bc.id} className="hover:bg-white/5">
                           <td className="p-3 md:p-4 text-white uppercase">{bc.barber_name}</td>
                           <td className="p-3 md:p-4 text-gray-400">{bc.commission_percentage}%</td>
-                          <td className="p-3 md:p-4 text-emerald-400">${safeInt(bc.services_total).toLocaleString()}</td>
+                          <td className="p-3 md:p-4 text-emerald-400">${safeN(bc.services_total).toLocaleString()}</td>
                           <td className="p-3 md:p-4 text-gray-300">${comision.toLocaleString()}</td>
                           <td className="p-3 md:p-4 text-red-500">{adelanto > 0 ? `-$${adelanto.toLocaleString()}` : '—'}</td>
                           <td className={`p-3 md:p-4 text-base md:text-lg font-black ${excedio ? 'text-orange-400' : 'text-emerald-400 bg-emerald-500/5'}`}>
@@ -745,7 +772,7 @@ const CashRegister = () => {
               )}
               {cierreReport.status === 'borrador' || cierreReport.status === 'guardado' ? (
                 <button
-                  onClick={() => { if(window.confirm('¿Seguro que deseas confirmar el cierre? Ya no se podrán agregar más cortes al día de hoy.')) forceConfirmCierre.mutate(); }}
+                  onClick={() => openConfirm('¿Confirmar el arqueo y cerrar el día? Esta acción es definitiva.', () => forceConfirmCierre.mutate())}
                   className="btn bg-red-600 hover:bg-red-500 text-white shadow-[4px_4px_0px_rgba(0,0,0,1)] uppercase tracking-widest font-black py-3 px-8 text-lg"
                 >
                   CONFIRMAR ARQUEO Y CERRAR DÍA
@@ -1133,10 +1160,9 @@ const CashRegister = () => {
             <div className="flex gap-3">
               <button
                 onClick={() => {
-                  setActiveModal(null);
+                  // FIX: transición directa sin setTimeout — React re-renderiza en un ciclo limpio
                   setLastCreatedService(null);
-                  // Pequeño delay para que el modal cierre antes de abrir el siguiente
-                  setTimeout(() => setActiveModal('service'), 100);
+                  setActiveModal('service');
                 }}
                 className="flex-1 btn border border-white/20 text-gray-300 hover:bg-white/5 font-black uppercase tracking-widest py-3 text-sm"
               >
@@ -1172,12 +1198,31 @@ const CashRegister = () => {
               {updateReportNotes.isLoading ? 'GUARDANDO...' : 'GUARDAR NOTAS'}
             </button>
             <button
-              onClick={() => { if(window.confirm('Recalcular el arqueo con todos los registros actuales?')) forceRecalculate.mutate(); }}
+              onClick={() => openConfirm('¿Recalcular el arqueo con todos los registros actuales?', () => forceRecalculate.mutate())}
               disabled={forceRecalculate.isLoading}
               className="flex-1 btn bg-yellow-500 hover:bg-yellow-400 text-black py-3 shadow-[4px_4px_0px_rgba(0,0,0,1)] font-black uppercase tracking-widest">
               {forceRecalculate.isLoading ? 'RECALCULANDO...' : 'RECALCULAR TOTALES'}
             </button>
           </div>
+        </div>
+      </Modal>
+
+      {/* FIX: Modal de confirmación — reemplaza window.confirm() bloqueante */}
+      <Modal isOpen={confirmModal.open} onClose={closeConfirm} title="Confirmar acción" maxWidth="max-w-sm">
+        <p className="text-gray-300 font-bold tracking-wide mb-6">{confirmModal.message}</p>
+        <div className="flex gap-3">
+          <button
+            onClick={closeConfirm}
+            className="flex-1 btn border border-white/20 text-gray-400 hover:bg-white/5 font-black uppercase tracking-widest py-3"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={() => { confirmModal.onConfirm?.(); closeConfirm(); }}
+            className="flex-1 btn bg-red-600 hover:bg-red-500 text-white shadow-[4px_4px_0px_rgba(0,0,0,1)] font-black uppercase tracking-widest py-3"
+          >
+            Confirmar
+          </button>
         </div>
       </Modal>
 

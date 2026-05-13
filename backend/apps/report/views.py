@@ -1,7 +1,7 @@
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from django.db import transaction, models
+from django.db import transaction, models, IntegrityError
 from django.db.models import Sum, F, ExpressionWrapper, DecimalField, Prefetch
 from django.utils import timezone
 
@@ -49,28 +49,40 @@ class DailyReportViewSet(viewsets.ModelViewSet):
         return [IsAdminOrManager()]
 
     def get_queryset(self):
+        # FIX: prefetch payment_breakdown con select_related para evitar N+1 en payment_method
         qs = DailyReport.objects.prefetch_related(
-            'payment_breakdown',
+            Prefetch(
+                'payment_breakdown',
+                queryset=DailyReportPaymentBreakdown.objects.select_related('payment_method')
+            ),
             Prefetch(
                 'barber_commissions',
                 queryset=BarberDailyCommission.objects.select_related('barber')
             )
         ).filter(barbershop=self.request.user.barbershop)
-        
+
         status_filter = self.request.query_params.get('status')
-        date = self.request.query_params.get('date')
-        date_from = self.request.query_params.get('date_from')
-        date_to = self.request.query_params.get('date_to')
-        
+        date_param    = self.request.query_params.get('date')
+        date_from     = self.request.query_params.get('date_from')
+        date_to       = self.request.query_params.get('date_to')
+
+        # FIX: validar fechas antes de pasarlas al ORM para retornar 400 en lugar de 500
+        def _parse_date(value, param_name):
+            try:
+                return datetime.datetime.strptime(value, "%Y-%m-%d").date()
+            except ValueError:
+                from rest_framework.exceptions import ValidationError
+                raise ValidationError({param_name: f"Formato inválido. Use YYYY-MM-DD. Recibido: '{value}'"})
+
         if status_filter:
-             qs = qs.filter(status=status_filter)
-        if date:
-             qs = qs.filter(report_date=date)
+            qs = qs.filter(status=status_filter)
+        if date_param:
+            qs = qs.filter(report_date=_parse_date(date_param, 'date'))
         if date_from:
-             qs = qs.filter(report_date__gte=date_from)
+            qs = qs.filter(report_date__gte=_parse_date(date_from, 'date_from'))
         if date_to:
-             qs = qs.filter(report_date__lte=date_to)
-             
+            qs = qs.filter(report_date__lte=_parse_date(date_to, 'date_to'))
+
         return qs.order_by('-report_date')
 
 
@@ -103,20 +115,32 @@ class DailyReportViewSet(viewsets.ModelViewSet):
 
         barbershop = request.user.barbershop
 
-        with transaction.atomic():
-            # 1. Verificar si existe uno
-            report, created = DailyReport.objects.get_or_create(
-                barbershop=barbershop,
-                report_date=target_date,
-                defaults={'status': 'borrador'}
+        try:
+          with transaction.atomic():
+            # 1. Obtener o crear el reporte del día.
+            # FIX race condition: select_for_update() bloquea la fila en la primera lectura
+            # dentro del bloque atómico, evitando que dos requests simultáneos creen duplicados.
+            # Si dos requests llegan al mismo tiempo, el segundo esperará a que el primero
+            # termine en lugar de lanzar IntegrityError.
+            existing = (
+                DailyReport.objects
+                .select_for_update()
+                .filter(barbershop=barbershop, report_date=target_date)
+                .first()
             )
+            if existing:
+                report  = existing
+                created = False
+            else:
+                report  = DailyReport.objects.create(barbershop=barbershop, report_date=target_date, status='borrador')
+                created = True
 
             if not created and report.status == 'confirmado':
                  if not request.data.get('force'):
                      return Response({
                           "error": "El cierre ya esta confirmado para esta fecha. Envie force=true si desea recalcular (advertencia: esto pisara los datos confirmados)."
                      }, status=status.HTTP_400_BAD_REQUEST)
-                 # Si 'force' pasa, continuara el recalculo y lo volvera 'borrador' otra vez o guardara igual.
+                 # Si 'force' pasa, continuara el recalculo y lo volvera 'guardado'.
 
             # Limpiar desgloses existentes antes de recalcular
             report.payment_breakdown.all().delete()
@@ -302,17 +326,31 @@ class DailyReportViewSet(viewsets.ModelViewSet):
             serializer = self.get_serializer(report)
             return Response(serializer.data, status=status.HTTP_200_OK if not created else status.HTTP_201_CREATED)
 
+        except IntegrityError:
+            # FIX: dos requests simultáneos intentaron crear el mismo reporte.
+            # El primero ganó; el segundo recibe un 409 claro en vez de un 500.
+            return Response(
+                {"error": "El cierre para esta fecha ya fue creado por otra solicitud simultánea. Intenta de nuevo."},
+                status=status.HTTP_409_CONFLICT
+            )
+
     @action(detail=True, methods=['patch'], url_path='confirmar')
     def confirmar(self, request, pk=None):
-         report = self.get_object()
-         
-         if report.status == 'confirmado':
-              return Response({"detail": "El reporte ya está confirmado."}, status=status.HTTP_400_BAD_REQUEST)
-              
-         report.status = 'confirmado'
-         if 'notes' in request.data:
-              report.notes = request.data['notes']
-              
-         # Aqui podriamos setear data_snapshot = json logic para freezearlo permenantemente si quremos.
-         report.save()
-         return Response(self.get_serializer(report).data)
+        report = self.get_object()
+
+        if report.status == 'confirmado':
+            return Response({"detail": "El reporte ya está confirmado."}, status=status.HTTP_400_BAD_REQUEST)
+
+        report.status = 'confirmado'
+        if 'notes' in request.data:
+            report.notes = request.data['notes']
+
+        # FIX: congelar un snapshot inmutable del reporte al momento de confirmar.
+        # Esto garantiza que aunque se modifiquen registros históricos en la DB,
+        # el cierre confirmado siempre conserva los números exactos que se aprobaron.
+        serializer = self.get_serializer(report)
+        report.data_snapshot = serializer.data
+
+        report.save()
+        # Re-serializar después del save para devolver el objeto actualizado
+        return Response(self.get_serializer(report).data)

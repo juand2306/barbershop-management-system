@@ -7,22 +7,11 @@ import {
   Search, ArrowUpRight, ArrowDownRight,
   FileText, User, Clock, BarChart2, X, Printer
 } from 'lucide-react';
-import { fmt } from '../../utils/helpers';
+import { fmt, fmtDate, fmtDateTime } from '../../utils/helpers';
 import StatusBadge from '../../components/StatusBadge';
 import Modal from '../../components/Modal';
-import { format, parseISO, startOfMonth, endOfMonth, subMonths } from 'date-fns';
-import { es } from 'date-fns/locale';
+import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 import { printTicket } from '../../utils/printTicket';
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-const fmtDate = (str) => {
-  if (!str) return '—';
-  try { return format(parseISO(str), "d MMM yyyy", { locale: es }); } catch { return str; }
-};
-const fmtDateTime = (str) => {
-  if (!str) return '—';
-  try { return format(parseISO(str), "d MMM yyyy HH:mm", { locale: es }); } catch { return str; }
-};
 
 // ─── Quick date range presets ──────────────────────────────────────────────
 const getPreset = (preset) => {
@@ -63,8 +52,9 @@ const TAB_COLORS = {
 };
 
 // ─── Filter Bar component ────────────────────────────────────────────────────
-const FilterBar = ({ filters, setFilters, barbers, paymentMethods, showBarber = true, showPayment = true, showCategory = false, showStatus = false }) => {
-  const [open, setOpen] = useState(true);
+// FIX: `open` y `onToggle` vienen del padre para que el estado NO se pierda al cambiar de tab.
+// Antes: FilterBar tenía su propio useState(true), por lo que siempre se abría al cambiar de tab.
+const FilterBar = ({ filters, setFilters, barbers, paymentMethods, showBarber = true, showPayment = true, showCategory = false, showStatus = false, open, onToggle }) => {
 
   const applyPreset = (preset) => {
     const { from, to } = getPreset(preset);
@@ -74,7 +64,7 @@ const FilterBar = ({ filters, setFilters, barbers, paymentMethods, showBarber = 
   return (
     <div className="glass-panel mb-4 overflow-hidden">
       <button
-        onClick={() => setOpen(o => !o)}
+        onClick={onToggle}
         className="w-full flex items-center justify-between px-5 py-3 text-left hover:bg-white/5 transition-colors"
       >
         <div className="flex items-center gap-2 text-sm font-bold text-gray-300 uppercase tracking-wider">
@@ -246,6 +236,14 @@ const CierreDetailModal = ({ report, onClose }) => {
     .filter(pb => pb.is_cash)
     .reduce((s, pb) => s + sv(pb.expected_amount), 0);
 
+  // Cuánto debe pagar la cajera a los barberos en efectivo (comisión menos adelanto ya entregado)
+  const totalToPayBarbers = (report.barber_commissions || [])
+    .reduce((sum, bc) => {
+      const neto = sv(bc.commission_amount) - sv(bc.pending_advances_total);
+      return sum + Math.max(0, neto);
+    }, 0);
+  const efectivoAEntregar = totalCash - totalToPayBarbers;
+
   return (
     <Modal isOpen onClose={onClose} title={`Cierre del ${fmtDate(report.report_date)}`}>
       <div className="space-y-6">
@@ -256,7 +254,7 @@ const CierreDetailModal = ({ report, onClose }) => {
           {report.notes && <span className="text-xs text-gray-500 italic">{report.notes}</span>}
         </div>
 
-        {/* 5 cards */}
+        {/* 5 cards — 2 cols móvil, 3 cols md. Efectivo ocupa fila completa en móvil para no desbordar */}
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           <div className="bg-[#0c0c0e] border border-emerald-500/20 p-3 shadow-[2px_2px_0px_rgba(16,185,129,0.2)]">
             <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-1 flex items-center gap-1"><Scissors className="w-3 h-3 text-emerald-400"/> Servicios</p>
@@ -278,10 +276,17 @@ const CierreDetailModal = ({ report, onClose }) => {
             <p className="text-xl font-black text-blue-400">{fmt(totalPlatforms)}</p>
             <p className="text-[9px] text-gray-500 uppercase mt-1 font-bold tracking-widest">Nequi, Daviplata, etc.</p>
           </div>
-          <div className="bg-[#0c0c0e] border border-amber-500/20 p-3 shadow-[2px_2px_0px_rgba(245,158,11,0.2)]">
+          {/* Efectivo — ocupa 2 columnas en móvil para que el contenido extra no desborde */}
+          <div className="col-span-2 md:col-span-1 bg-[#0c0c0e] border border-amber-500/20 p-3 shadow-[2px_2px_0px_rgba(245,158,11,0.2)]">
             <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-1 flex items-center gap-1"><DollarSign className="w-3 h-3 text-amber-400"/> Efectivo en Caja</p>
             <p className="text-xl font-black text-amber-400">{fmt(totalCash)}</p>
-            <p className="text-[9px] text-gray-500 uppercase mt-1 font-bold tracking-widest">Lo que debe estar en caja</p>
+            <p className="text-[9px] text-gray-500 uppercase mt-1 font-bold tracking-widest">Efectivo</p>
+            <div className="mt-2 pt-2 border-t border-white/10">
+              <span className="block text-[9px] text-yellow-400/70 font-black uppercase tracking-widest">Dinero a entregar:</span>
+              <span className={`block text-base font-black mt-0.5 ${efectivoAEntregar >= 0 ? 'text-yellow-400' : 'text-orange-400'}`}>
+                {fmt(efectivoAEntregar)}
+              </span>
+            </div>
           </div>
         </div>
 
@@ -300,7 +305,8 @@ const CierreDetailModal = ({ report, onClose }) => {
                 const inflows = sv(pb.services_amount) + sv(pb.products_amount) + sv(pb.advance_payments_amount);
                 const gastos = sv(pb.expenses_amount);
                 const vales = sv(pb.advances_given_amount);
-                const total = inflows - gastos;
+                // FIX: fuente de verdad unificada con los totales de Efectivo/Plataformas
+                const total = sv(pb.expected_amount);
                 return (
                   <div key={pb.id} className="bg-[#0c0c0e] p-4 border-l-4 border-emerald-400">
                     <h4 className="font-black text-white uppercase text-sm mb-3">{pb.payment_method_name}</h4>
@@ -366,8 +372,11 @@ const CierreDetailModal = ({ report, onClose }) => {
 };
 
 // ─── Tab: Cierres de Caja ────────────────────────────────────────────────────
-const CierresTab = ({ filters, onFilterChange, barbers, paymentMethods }) => {
-  const [selectedReport, setSelectedReport] = useState(null);
+const CierresTab = ({ filters, onFilterChange, barbers, paymentMethods, filterBarOpen, onToggleFilterBar }) => {
+  // FIX: guardar solo el ID del reporte seleccionado, no el objeto completo.
+  // El objeto real se deriva del array `data` actualizado por React Query, por lo que
+  // si el cierre se regenera y la query se invalida, el modal siempre muestra datos frescos.
+  const [selectedReportId, setSelectedReportId] = useState(null);
 
   const params = new URLSearchParams();
   if (filters.date_from) params.set('date_from', filters.date_from);
@@ -389,6 +398,12 @@ const CierresTab = ({ filters, onFilterChange, barbers, paymentMethods }) => {
     return d;
   }, [data, filters.search]);
 
+  // Derivar el reporte seleccionado desde el array fresco (no desde el snapshot del click)
+  const selectedReport = useMemo(
+    () => (selectedReportId ? (data || []).find(r => r.id === selectedReportId) ?? null : null),
+    [selectedReportId, data]
+  );
+
   const totals = useMemo(() => ({
     income: filtered.reduce((a, r) => a + Number(r.total_services_amount || 0) + Number(r.total_products_amount || 0) + Number(r.total_advance_payments || 0), 0),
     commissions: filtered.reduce((a, r) => a + Number(r.barber_commission_total || 0), 0),
@@ -398,7 +413,7 @@ const CierresTab = ({ filters, onFilterChange, barbers, paymentMethods }) => {
   return (
     <>
       <FilterBar filters={filters} setFilters={onFilterChange} barbers={barbers} paymentMethods={paymentMethods}
-        showBarber={false} showPayment={false} showStatus={true} />
+        showBarber={false} showPayment={false} showStatus={true} open={filterBarOpen} onToggle={onToggleFilterBar} />
 
       <SummaryCards color="purple" cards={[
         { label: 'Cierres', value: filtered.length, icon: FileText },
@@ -425,7 +440,7 @@ const CierresTab = ({ filters, onFilterChange, barbers, paymentMethods }) => {
             <tr
               key={r.id}
               className="hover:bg-white/[0.05] transition-colors cursor-pointer"
-              onClick={() => setSelectedReport(r)}
+              onClick={() => setSelectedReportId(r.id)}
               title="Click para ver detalle del cierre"
             >
               <Td>
@@ -449,14 +464,14 @@ const CierresTab = ({ filters, onFilterChange, barbers, paymentMethods }) => {
       </TableWrap>
 
       {selectedReport && (
-        <CierreDetailModal report={selectedReport} onClose={() => setSelectedReport(null)} />
+        <CierreDetailModal report={selectedReport} onClose={() => setSelectedReportId(null)} />
       )}
     </>
   );
 };
 
 // ─── Tab: Servicios ──────────────────────────────────────────────────────────
-const ServiciosTab = ({ filters, onFilterChange, barbers, paymentMethods, shopInfo }) => {
+const ServiciosTab = ({ filters, onFilterChange, barbers, paymentMethods, shopInfo, filterBarOpen, onToggleFilterBar }) => {
   const params = new URLSearchParams();
   if (filters.date_from) params.set('date_from', filters.date_from);
   if (filters.date_to) params.set('date_to', filters.date_to);
@@ -494,7 +509,7 @@ const ServiciosTab = ({ filters, onFilterChange, barbers, paymentMethods, shopIn
   return (
     <>
       <FilterBar filters={filters} setFilters={onFilterChange} barbers={barbers} paymentMethods={paymentMethods}
-        showBarber={true} showPayment={true} showStatus={true} />
+        showBarber={true} showPayment={true} showStatus={true} open={filterBarOpen} onToggle={onToggleFilterBar} />
 
       <SummaryCards color="cyan" cards={[
         { label: 'Registros', value: filtered.length, icon: Scissors },
@@ -546,11 +561,13 @@ const ServiciosTab = ({ filters, onFilterChange, barbers, paymentMethods, shopIn
 };
 
 // ─── Tab: Gastos ─────────────────────────────────────────────────────────────
-const GastosTab = ({ filters, onFilterChange, barbers, paymentMethods }) => {
+const GastosTab = ({ filters, onFilterChange, barbers, paymentMethods, filterBarOpen, onToggleFilterBar }) => {
   const params = new URLSearchParams();
-  if (filters.date_from) params.set('date_from', filters.date_from);
-  if (filters.date_to) params.set('date_to', filters.date_to);
-  if (filters.category) params.set('category', filters.category);
+  if (filters.date_from)      params.set('date_from', filters.date_from);
+  if (filters.date_to)        params.set('date_to', filters.date_to);
+  if (filters.category)       params.set('category', filters.category);
+  // FIX: filtro de método de pago ahora va al servidor en vez de hacerse client-side
+  if (filters.payment_method) params.set('payment_method', filters.payment_method);
 
   const { data, isLoading } = useQuery(['history-gastos', filters], async () => {
     const res = await api.get(`/expenses/?${params.toString()}`);
@@ -560,13 +577,13 @@ const GastosTab = ({ filters, onFilterChange, barbers, paymentMethods }) => {
   const filtered = useMemo(() => {
     if (!data) return [];
     let d = [...data];
-    if (filters.payment_method) d = d.filter(r => String(r.payment_method) === String(filters.payment_method));
     if (filters.search) {
       const s = filters.search.toLowerCase();
-      d = d.filter(r => r.detail?.toLowerCase().includes(s) || r.category?.includes(s));
+      // FIX: búsqueda case-insensitive en category (antes usaba includes sin toLowerCase)
+      d = d.filter(r => r.detail?.toLowerCase().includes(s) || r.category?.toLowerCase().includes(s));
     }
     return d;
-  }, [data, filters.payment_method, filters.search]);
+  }, [data, filters.search]);
 
   const total = filtered.reduce((a, r) => a + Number(r.amount || 0), 0);
   const byCategory = useMemo(() => {
@@ -584,7 +601,7 @@ const GastosTab = ({ filters, onFilterChange, barbers, paymentMethods }) => {
   return (
     <>
       <FilterBar filters={filters} setFilters={onFilterChange} barbers={barbers} paymentMethods={paymentMethods}
-        showBarber={false} showPayment={true} showCategory={true} />
+        showBarber={false} showPayment={true} showCategory={true} open={filterBarOpen} onToggle={onToggleFilterBar} />
 
       <SummaryCards color="red" cards={[
         { label: 'Gastos', value: filtered.length, icon: TrendingDown },
@@ -628,12 +645,14 @@ const GastosTab = ({ filters, onFilterChange, barbers, paymentMethods }) => {
 };
 
 // ─── Tab: Vales ──────────────────────────────────────────────────────────────
-const ValesTab = ({ filters, onFilterChange, barbers, paymentMethods }) => {
+const ValesTab = ({ filters, onFilterChange, barbers, paymentMethods, filterBarOpen, onToggleFilterBar }) => {
   const params = new URLSearchParams();
-  if (filters.date_from) params.set('date_from', filters.date_from);
-  if (filters.date_to) params.set('date_to', filters.date_to);
-  if (filters.barber) params.set('barber', filters.barber);
-  if (filters.status) params.set('status', filters.status);
+  if (filters.date_from)      params.set('date_from', filters.date_from);
+  if (filters.date_to)        params.set('date_to', filters.date_to);
+  if (filters.barber)         params.set('barber', filters.barber);
+  if (filters.status)         params.set('status', filters.status);
+  // FIX: filtro de método de pago ahora va al servidor en vez de hacerse client-side
+  if (filters.payment_method) params.set('payment_method', filters.payment_method);
 
   const { data, isLoading } = useQuery(['history-vales', filters], async () => {
     const res = await api.get(`/advances/?${params.toString()}`);
@@ -643,13 +662,12 @@ const ValesTab = ({ filters, onFilterChange, barbers, paymentMethods }) => {
   const filtered = useMemo(() => {
     if (!data) return [];
     let d = [...data];
-    if (filters.payment_method) d = d.filter(r => String(r.payment_method) === String(filters.payment_method));
     if (filters.search) {
       const s = filters.search.toLowerCase();
       d = d.filter(r => r.barber_name?.toLowerCase().includes(s) || r.detail?.toLowerCase().includes(s));
     }
     return d;
-  }, [data, filters.payment_method, filters.search]);
+  }, [data, filters.search]);
 
   const totalDado = filtered.reduce((a, r) => a + Number(r.amount || 0), 0);
   const totalPagado = filtered.reduce((a, r) => a + Number(r.amount_paid || 0), 0);
@@ -662,7 +680,7 @@ const ValesTab = ({ filters, onFilterChange, barbers, paymentMethods }) => {
   return (
     <>
       <FilterBar filters={filters} setFilters={onFilterChange} barbers={barbers} paymentMethods={paymentMethods}
-        showBarber={true} showPayment={true} showStatus={false} />
+        showBarber={true} showPayment={true} showStatus={false} open={filterBarOpen} onToggle={onToggleFilterBar} />
 
       {/* Custom vales status filter */}
       <div className="mb-3 flex gap-2 flex-wrap">
@@ -719,7 +737,7 @@ const ValesTab = ({ filters, onFilterChange, barbers, paymentMethods }) => {
 };
 
 // ─── Tab: Ventas Productos ───────────────────────────────────────────────────
-const ProductosTab = ({ filters, onFilterChange, barbers, paymentMethods }) => {
+const ProductosTab = ({ filters, onFilterChange, barbers, paymentMethods, filterBarOpen, onToggleFilterBar }) => {
   const params = new URLSearchParams();
   if (filters.date_from) params.set('date_from', filters.date_from);
   if (filters.date_to) params.set('date_to', filters.date_to);
@@ -747,7 +765,7 @@ const ProductosTab = ({ filters, onFilterChange, barbers, paymentMethods }) => {
   return (
     <>
       <FilterBar filters={filters} setFilters={onFilterChange} barbers={barbers} paymentMethods={paymentMethods}
-        showBarber={false} showPayment={true} />
+        showBarber={false} showPayment={true} open={filterBarOpen} onToggle={onToggleFilterBar} />
 
       <SummaryCards color="green" cards={[
         { label: 'Ventas', value: filtered.length, icon: Package },
@@ -789,6 +807,8 @@ const ProductosTab = ({ filters, onFilterChange, barbers, paymentMethods }) => {
 // ─── Main History Page ────────────────────────────────────────────────────────
 const HistoryPage = () => {
   const [activeTab, setActiveTab] = useState('cierres');
+  // FIX: estado del FilterBar en el padre para que no se resetee al cambiar de tab
+  const [filterBarOpen, setFilterBarOpen] = useState(true);
   const [filters, setFilters] = useState({
     date_from: format(startOfMonth(new Date()), 'yyyy-MM-dd'),
     date_to: format(new Date(), 'yyyy-MM-dd'),
@@ -799,10 +819,11 @@ const HistoryPage = () => {
     search: '',
   });
 
-  const { data: barbers } = useQuery(['barbers-all'], async () => {
+  // FIX: clave unificada con CashRegister.jsx para compartir el mismo caché y evitar doble fetch
+  const { data: barbers } = useQuery(['barbers'], async () => {
     const res = await api.get('/barbers/');
     return res.data.results || res.data;
-  }, { staleTime: 120000 });
+  }, { staleTime: 300000 });
 
   const { data: paymentMethods } = useQuery(['payment-methods'], async () => {
     const res = await api.get('/payment-methods/');
@@ -817,7 +838,32 @@ const HistoryPage = () => {
   const currentTab = TABS.find(t => t.id === activeTab);
   const tabColor = TAB_COLORS[currentTab?.color] || TAB_COLORS.purple;
 
-  const tabProps = { filters, onFilterChange: setFilters, barbers, paymentMethods, shopInfo };
+  // FIX: al cambiar de tab, limpiar filtros específicos de cada tab (status, barber, payment_method,
+  // category, search) para evitar que un filtro de un tab contamine otro con vocabulario diferente
+  // (ej: status='completado' de Servicios enviado al endpoint de Vales → resultados vacíos sin razón).
+  // Se preservan las fechas para no interrumpir el rango de análisis del usuario.
+  const handleTabChange = (tabId) => {
+    setActiveTab(tabId);
+    setFilters(prev => ({
+      date_from: prev.date_from,
+      date_to: prev.date_to,
+      barber: '',
+      payment_method: '',
+      category: '',
+      status: '',
+      search: '',
+    }));
+  };
+
+  const tabProps = {
+    filters,
+    onFilterChange: setFilters,
+    barbers,
+    paymentMethods,
+    shopInfo,
+    filterBarOpen,
+    onToggleFilterBar: () => setFilterBarOpen(o => !o),
+  };
 
   return (
     <div className="animate-slide-up space-y-6">
@@ -844,7 +890,7 @@ const HistoryPage = () => {
           return (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => handleTabChange(tab.id)}
               className={`flex items-center gap-1.5 px-3 sm:px-5 py-2.5 sm:py-3 text-xs sm:text-sm font-bold uppercase tracking-wider border-b-2 whitespace-nowrap transition-all ${
                 isActive
                   ? `${tc.active} bg-white/5`

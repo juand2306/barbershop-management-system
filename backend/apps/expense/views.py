@@ -29,10 +29,11 @@ class ExpenseViewSet(viewsets.ModelViewSet):
         ).filter(barbershop=self.request.user.barbershop)
 
         # Filtros opcionales via query params
-        date = self.request.query_params.get('date')
-        category = self.request.query_params.get('category')
-        date_from = self.request.query_params.get('date_from')
-        date_to = self.request.query_params.get('date_to')
+        date           = self.request.query_params.get('date')
+        category       = self.request.query_params.get('category')
+        date_from      = self.request.query_params.get('date_from')
+        date_to        = self.request.query_params.get('date_to')
+        payment_method = self.request.query_params.get('payment_method')
 
         if date:
             qs = qs.filter(expense_date=date)
@@ -42,6 +43,9 @@ class ExpenseViewSet(viewsets.ModelViewSet):
             qs = qs.filter(expense_date__gte=date_from)
         if date_to:
             qs = qs.filter(expense_date__lte=date_to)
+        # FIX: mover filtro de método de pago al servidor (era client-side en el frontend)
+        if payment_method:
+            qs = qs.filter(payment_method_id=payment_method)
 
         return qs
 

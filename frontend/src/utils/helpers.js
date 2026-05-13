@@ -1,3 +1,23 @@
+import { format, parseISO } from 'date-fns';
+import { es } from 'date-fns/locale';
+
+/**
+ * Formatea una fecha ISO (YYYY-MM-DD o datetime string) como "12 may 2026".
+ * Centralizado aquí para evitar duplicación en History.jsx y otros módulos.
+ */
+export const fmtDate = (str) => {
+  if (!str) return '—';
+  try { return format(parseISO(str), 'd MMM yyyy', { locale: es }); } catch { return str; }
+};
+
+/**
+ * Formatea un datetime ISO como "12 may 2026 14:30".
+ */
+export const fmtDateTime = (str) => {
+  if (!str) return '—';
+  try { return format(parseISO(str), 'd MMM yyyy HH:mm', { locale: es }); } catch { return str; }
+};
+
 export const extractApiError = (err) => {
   const data = err.response?.data;
   if (!data) return 'Error de conexión con el servidor';

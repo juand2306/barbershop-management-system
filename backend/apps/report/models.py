@@ -77,7 +77,7 @@ class DailyReport(models.Model):
     barbershop_profit = models.DecimalField(
         max_digits=12, decimal_places=2, default=0,
         verbose_name='Ganancia neta de la barberia',
-        help_text='(Servicios + Productos + PagosVale) - Gastos - Vales - Comisiones'
+        help_text='Servicios + Productos - Gastos - Comisiones. Vales y pagos de vales NO afectan la ganancia.'
     )
 
     status = models.CharField(
@@ -256,7 +256,10 @@ class BarberDailyCommission(models.Model):
     class Meta:
         verbose_name = 'Comision Diaria Barbero'
         verbose_name_plural = 'Comisiones Diarias Barberos'
-        unique_together = ('barber', 'commission_date')
+        # FIX: incluir daily_report para que la constraint sea coherente con el diseño:
+        # un barbero puede tener comisión en la misma fecha solo si pertenece a reportes distintos
+        # (edge case improbable, pero evita IntegrityError al regenerar con force=True).
+        unique_together = ('barber', 'commission_date', 'daily_report')
         ordering = ['-commission_date']
 
     def __str__(self):

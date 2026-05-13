@@ -31,15 +31,19 @@ class AdvanceViewSet(viewsets.ModelViewSet):
             'barber', 'payment_method', 'registered_by'
         ).filter(barbershop=self.request.user.barbershop)
 
-        barber_id = self.request.query_params.get('barber')
-        status_filter = self.request.query_params.get('status')
-        date_from = self.request.query_params.get('date_from')
-        date_to = self.request.query_params.get('date_to')
+        barber_id      = self.request.query_params.get('barber')
+        status_filter  = self.request.query_params.get('status')
+        date_from      = self.request.query_params.get('date_from')
+        date_to        = self.request.query_params.get('date_to')
+        payment_method = self.request.query_params.get('payment_method')
 
         if barber_id:
             qs = qs.filter(barber_id=barber_id)
         if status_filter:
             qs = qs.filter(status=status_filter)
+        # FIX: mover filtro de método de pago al servidor (era client-side en el frontend)
+        if payment_method:
+            qs = qs.filter(payment_method_id=payment_method)
         # created_at es DateTimeField: usar rangos timezone-aware en vez de __date
         if date_from:
             try:
