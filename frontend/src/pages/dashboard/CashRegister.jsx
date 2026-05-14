@@ -6,7 +6,7 @@ import { es } from 'date-fns/locale';
 import { toast } from 'react-toastify';
 import { Calculator, DollarSign, Scissors, Package, Receipt, LogOut, CreditCard, Edit3, FileDown, Plus, Trash2, SplitSquareHorizontal, Printer, CheckCircle } from 'lucide-react';
 import { printTicket } from '../../utils/printTicket';
-import { extractApiError, getLocalDateStr, safeN } from '../../utils/helpers';
+import { extractApiError, getLocalDateStr, safeN, fmt } from '../../utils/helpers';
 import Modal from '../../components/Modal';
 
 // ─── Constantes de módulo (fuera del componente para evitar recreación en cada render) ──────────
