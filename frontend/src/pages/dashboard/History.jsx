@@ -236,21 +236,14 @@ const CierreDetailModal = ({ report, onClose }) => {
     .filter(pb => pb.is_cash)
     .reduce((s, pb) => s + sv(pb.expected_amount), 0);
 
-  // Vales entregados EN EFECTIVO ese día — ya salieron físicamente de la caja
-  // pero expected_amount NO los descuenta, así que hay que restarlos manualmente
-  const totalCashAdvancesGiven = (report.payment_breakdown || [])
-    .filter(pb => pb.is_cash)
-    .reduce((s, pb) => s + sv(pb.advances_given_amount), 0);
-
-  // Cuánto debe pagar la cajera a los barberos en efectivo (comisión menos adelanto ya entregado)
-  const totalToPayBarbers = (report.barber_commissions || [])
-    .reduce((sum, bc) => {
-      const neto = sv(bc.commission_amount) - sv(bc.pending_advances_total);
-      return sum + Math.max(0, neto);
-    }, 0);
-
-  // FIX: caja física real = expected_amount - vales ya entregados en cash
-  const efectivoAEntregar = (totalCash - totalCashAdvancesGiven) - totalToPayBarbers;
+  // Dinero a entregar a la dueña:
+  // = mitad de servicios que le corresponde a la barbería
+  //   − gastos del día
+  //   − plataformas (ese dinero ya está en digital, no en caja)
+  // Productos: se manejan aparte (sobre independiente), no entran en este cálculo.
+  // Vales: son adelantos de nómina, ya están dentro de la mitad de los barberos, no afectan aquí.
+  const barbershopShare = sv(report.total_services_amount) - sv(report.barber_commission_total);
+  const efectivoAEntregar = barbershopShare - sv(report.total_expenses) - totalPlatforms;
 
   return (
     <Modal isOpen onClose={onClose} title={`Cierre del ${fmtDate(report.report_date)}`}>

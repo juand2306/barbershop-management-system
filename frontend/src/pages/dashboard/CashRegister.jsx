@@ -145,17 +145,24 @@ const exportReportPDF = async (report, shopName) => {
   const totalPlatPDF = (report.payment_breakdown || []).filter(pb => !pb.is_cash).reduce((s, pb) => s + (Number(pb.expected_amount) || 0), 0);
   const totalCashPDF = (report.payment_breakdown || []).filter(pb => pb.is_cash).reduce((s, pb) => s + (Number(pb.expected_amount) || 0), 0);
 
+  // Dinero a entregar: mitad barbería − gastos − plataformas (misma fórmula que la UI)
+  const barbershopSharePDF = (Number(report.total_services_amount) || 0) - (Number(report.barber_commission_total) || 0);
+  const dineroAEntregarPDF = barbershopSharePDF - (Number(report.total_expenses) || 0) - totalPlatPDF;
+
   const summaryData = [
     ['Servicios del Día', fmtM(report.total_services_amount)],
     ['Comisiones Barberos', fmtM(report.barber_commission_total)],
-    ['Productos Vendidos', fmtM(report.total_products_amount)],
+    ['Productos Vendidos (sobre aparte)', fmtM(report.total_products_amount)],
     ['Gastos del Local', fmtM(report.total_expenses)],
     ['Vales Entregados (Nómina)', fmtM(report.total_advances_given)],
-    ['Pagos de Vales Recibidos', fmtM(report.total_advance_payments)],
-    ['Total Plataformas', fmtM(totalPlatPDF)],
+    ['Total Plataformas (digital)', fmtM(totalPlatPDF)],
     ['Efectivo en Caja', fmtM(totalCashPDF)],
+    ['DINERO A ENTREGAR A LA DUEÑA', fmtM(dineroAEntregarPDF)],
     ['GANANCIA NETA BARBERÍA', fmtM(report.barbershop_profit)],
   ];
+
+  const IDX_DINERO   = summaryData.length - 2; // fila "Dinero a entregar"
+  const IDX_GANANCIA = summaryData.length - 1; // fila "Ganancia neta"
 
   autoTable(doc, {
     startY: y,
@@ -165,8 +172,15 @@ const exportReportPDF = async (report, shopName) => {
     headStyles: { fillColor: [80, 20, 120], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
     bodyStyles: { fontSize: 9, textColor: [30, 30, 30] },
     willDrawCell: (data) => {
-      // Highlight last row (profit)
-      if (data.row.index === summaryData.length - 1 && data.section === 'body') {
+      if (data.section !== 'body') return;
+      if (data.row.index === IDX_DINERO) {
+        // Amarillo/dorado — mismo color que la UI
+        data.cell.styles.fillColor = dineroAEntregarPDF >= 0 ? [202, 138, 4] : [194, 65, 12];
+        data.cell.styles.textColor = [255, 255, 255];
+        data.cell.styles.fontStyle = 'bold';
+        data.cell.styles.fontSize = 10;
+      }
+      if (data.row.index === IDX_GANANCIA) {
         data.cell.styles.fillColor = [10, 180, 140];
         data.cell.styles.textColor = [255, 255, 255];
         data.cell.styles.fontStyle = 'bold';
@@ -563,23 +577,14 @@ const CashRegister = () => {
     .filter(pb => pb.is_cash)
     .reduce((sum, pb) => sum + safeN(pb.expected_amount), 0);
 
-  // Vales entregados EN EFECTIVO ese día — ya salieron físicamente de la caja
-  // pero expected_amount NO los descuenta, así que hay que restarlos manualmente
-  const totalCashAdvancesGiven = (cierreReport?.payment_breakdown || [])
-    .filter(pb => pb.is_cash)
-    .reduce((sum, pb) => sum + safeN(pb.advances_given_amount), 0);
-
-  // Cuánto debe pagar la cajera a los barberos en efectivo (comisión menos adelanto ya entregado)
-  const totalToPayBarbers = (cierreReport?.barber_commissions || [])
-    .reduce((sum, bc) => {
-      const neto = safeN(bc.commission_amount) - safeN(bc.pending_advances_total);
-      return sum + Math.max(0, neto);
-    }, 0);
-
-  // FIX: caja física real = expected_amount - vales ya entregados en cash
-  // efectivoAEntregar = cajaFísica - lo que aún se debe a los barberos
-  // Los vales cancelan: salen de caja pero también reducen lo que se debe → resultado neto correcto
-  const efectivoAEntregar = (totalCash - totalCashAdvancesGiven) - totalToPayBarbers;
+  // Dinero a entregar a la dueña:
+  // = mitad de servicios que le corresponde a la barbería
+  //   − gastos del día
+  //   − plataformas (ese dinero ya está en digital, no en caja)
+  // Productos: se manejan aparte (sobre independiente), no entran en este cálculo.
+  // Vales: son adelantos de nómina, ya están dentro de la mitad de los barberos, no afectan aquí.
+  const barbershopShare = safeN(cierreReport?.total_services_amount) - safeN(cierreReport?.barber_commission_total);
+  const efectivoAEntregar = barbershopShare - safeN(cierreReport?.total_expenses) - totalPlatforms;
 
   return (
     <div className="animate-slide-up space-y-8 pb-10">
@@ -668,7 +673,7 @@ const CashRegister = () => {
                 <div className="mt-2 pt-2 border-t border-white/10">
                   <span className="block text-[10px] text-yellow-400/70 font-black uppercase tracking-widest">Dinero a entregar:</span>
                   <span className={`block text-lg font-black mt-0.5 ${efectivoAEntregar >= 0 ? 'text-yellow-400' : 'text-orange-400'}`}>
-                    ${efectivoAEntregar.toLocaleString()}
+                    {fmt(efectivoAEntregar)}
                   </span>
                 </div>
               </div>
